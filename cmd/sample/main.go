@@ -17,13 +17,16 @@ func main() {
 
 	lat := 49.8951
 	lon := -97.1384
+	zoom := 15
 
 	doc := js.Global().Get("document")
 
+	zoomEl := doc.Call("getElementById", "zoom")
 	latEl := doc.Call("getElementById", "latitude")
 	lonEl := doc.Call("getElementById", "longitude")
 	buttonEl := doc.Call("getElementById", "updatePosition")
 
+	zoomEl.Set("value", strconv.Itoa(zoom))
 	latEl.Set("value", strconv.FormatFloat(lat, 'f', 6, 64))
 	lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
 
@@ -94,7 +97,7 @@ func main() {
 	update := func() {
 		toDraw = nil
 
-		tiles := pichiwmap.TilesFromCenter(baseURL, 15, lat, lon, int(cWidth), int(cHeight))
+		tiles := pichiwmap.TilesFromCenter(baseURL, zoom, lat, lon, int(cWidth), int(cHeight))
 
 		for _, t := range tiles {
 			currentTile := t
@@ -113,26 +116,33 @@ func main() {
 		v[0].Call("preventDefault")
 		lastLat := lat
 		lastLon := lon
+		lastZoom := zoom
 
-		valid := true
 		var err error
+		zoom, err = strconv.Atoi(zoomEl.Get("value").String())
+		if err != nil {
+			zoom = lastZoom
+			zoomEl.Set("value", strconv.Itoa(zoom))
+			js.Global().Call("alert", "Invalid zoom (must be between 1 and 18)")
+			return
+		}
+
 		lat, err = strconv.ParseFloat(latEl.Get("value").String(), 64)
 		if err != nil {
 			lat = lastLat
 			latEl.Set("value", strconv.FormatFloat(lat, 'f', 6, 64))
 			js.Global().Call("alert", "Invalid Lon Value")
-			valid = false
+			return
 		}
 		lon, err = strconv.ParseFloat(lonEl.Get("value").String(), 64)
 		if err != nil {
 			lon = lastLon
 			lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
 			js.Global().Call("alert", "Invalid Lat Value")
-			valid = false
+			return
 		}
-		if valid {
-			update()
-		}
+
+		update()
 	}))
 
 	renderFrame = js.NewCallback(func(args []js.Value) {
