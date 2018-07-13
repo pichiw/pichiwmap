@@ -31,8 +31,9 @@ func main() {
 	}
 
 	canvasEl := doc.Call("getElementById", "mycanvas")
-	width := doc.Get("body").Get("clientWidth").Int()
-	height := doc.Get("body").Get("clientHeight").Int()
+	body := doc.Get("body")
+	width := body.Get("clientWidth").Int()
+	height := body.Get("clientHeight").Int()
 	canvasEl.Set("width", width)
 	canvasEl.Set("height", height)
 
@@ -135,7 +136,7 @@ func main() {
 
 	tlat := lat
 	tlon := lon
-	step := 0.0005
+	step := 0.001
 	var anim func()
 	anim = func() {
 		if lat == tlat && lon == tlon {
@@ -166,8 +167,8 @@ func main() {
 			}
 		}
 
+		time.Sleep(100 * time.Millisecond)
 		update()
-		time.Sleep(10 * time.Millisecond)
 		go anim()
 	}
 
@@ -179,37 +180,53 @@ func main() {
 		mouseDown     = false
 	)
 
-	canvasEl.Set("onmousedown", js.NewCallback(func(v []js.Value) {
-		mouseStartX = v[0].Get("clientX").Int()
-		mouseStartY = v[0].Get("clientY").Int()
+	body.Call("addEventListener", "gesturechange", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
+	body.Call("addEventListener", "gesturestart", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
+
+	onMouseDown := func(event js.Value) {
+		if touches := event.Get("touches"); touches != js.Undefined() {
+			event = touches.Index(0)
+		}
+		mouseStartX = event.Get("pageX").Int()
+		mouseStartY = event.Get("pageY").Int()
 		mouseStartLat = lat
 		mouseStartLon = lon
 		mouseDown = true
-	}))
+	}
 
-	canvasEl.Set("onmouseup", js.NewCallback(func(v []js.Value) {
+	onMouseUp := func(event js.Value) {
 		mouseDown = false
-	}))
+	}
 
-	canvasEl.Set("onmousemove", js.NewCallback(func(v []js.Value) {
+	onMouseMove := func(event js.Value) {
 		if !mouseDown {
 			return
 		}
 
-		dx := mouseStartX - v[0].Get("clientX").Int()
-		dy := mouseStartY - v[0].Get("clientY").Int()
+		if touches := event.Get("touches"); touches != js.Undefined() {
+			event = touches.Index(0)
+		}
+		dx := mouseStartX - event.Get("pageX").Int()
+		dy := mouseStartY - event.Get("pageY").Int()
 
 		lat, lon = pichiwmap.Move(zoom, mouseStartLat, mouseStartLon, dx, dy)
 		update()
-	}))
+	}
 
-	doc.Set("onkeyup", js.NewCallback(func(v []js.Value) {
+	canvasEl.Call("addEventListener", "mousedown", js.NewEventCallback(js.PreventDefault, onMouseDown), false)
+	canvasEl.Call("addEventListener", "mouseup", js.NewEventCallback(js.PreventDefault, onMouseUp), false)
+	canvasEl.Call("addEventListener", "mousemove", js.NewEventCallback(js.PreventDefault, onMouseMove), false)
+	canvasEl.Call("addEventListener", "touchstart", js.NewEventCallback(js.PreventDefault, onMouseDown), false)
+	canvasEl.Call("addEventListener", "touchend", js.NewEventCallback(js.PreventDefault, onMouseUp), false)
+	canvasEl.Call("addEventListener", "touchmove", js.NewEventCallback(js.PreventDefault, onMouseMove), false)
+
+	doc.Call("addEventListener", "keyup", js.NewEventCallback(js.PreventDefault, func(event js.Value) {
 		tlat = lat
 		tlon = lon
-	}))
+	}), false)
 
-	doc.Set("onkeydown", js.NewCallback(func(v []js.Value) {
-		e := v[0]
+	doc.Call("addEventListener", "keydown", js.NewEventCallback(js.PreventDefault, func(event js.Value) {
+		e := event
 		if e == js.Undefined() {
 			e = js.Global().Get("window").Get("event")
 		}
@@ -220,22 +237,21 @@ func main() {
 
 		switch e.Get("keyCode").Int() {
 		case 38: // up
-			tlat += 0.001
+			tlat += 0.005
 		case 40: // down
-			tlat -= 0.001
+			tlat -= 0.005
 		case 37: // left
-			tlon -= 0.001
+			tlon -= 0.005
 		case 39: // right
-			tlon += 0.001
+			tlon += 0.005
 		default:
 			return
 		}
 
 		go anim()
-	}))
+	}), false)
 
-	buttonEl.Set("onclick", js.NewCallback(func(v []js.Value) {
-		v[0].Call("preventDefault")
+	buttonEl.Call("addEventListener", "click", js.NewEventCallback(js.PreventDefault, func(event js.Value) {
 		lastLat := lat
 		lastLon := lon
 		lastZoom := zoom
@@ -265,7 +281,7 @@ func main() {
 		}
 
 		update()
-	}))
+	}), false)
 
 	renderFrame = js.NewCallback(func(args []js.Value) {
 		gl.Call("clearColor", 0, 0, 0, 0)
