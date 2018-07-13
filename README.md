@@ -34,7 +34,7 @@ Right this package is very experimental and most rendering logic is proof-of-con
 
 _As early as Go+WASM is, I'm already standing on the shoulders of giants._
 
-- [Brian Ketelson](https://brianketelsen.com/) for the inspiration to try Go/WASM in the first place and much discussion of implementation
+- [Brian Ketelsen](https://brianketelsen.com/) for the inspiration to try Go/WASM in the first place and much discussion of implementation
 - [Richard Musiol](https://github.com/neelance) for making [GopherJS](https://github.com/gopherjs) and Go/WASM happen
 - WebGL inspiration from https://github.com/stdiopt/gowasm-experiments
 - WebGL is implemented with considerable help of [WebGL Fundamentals](https://webglfundamentals.org/). Particularly [Draw Image](https://webglfundamentals.org/webgl/lessons/webgl-2d-drawimage.html)
