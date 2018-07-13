@@ -2,19 +2,17 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"net/url"
 	"strconv"
 	"time"
 
 	"syscall/js"
 
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/pichiw/pichiwmap"
 )
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-
 	lat := 49.8951
 	lon := -97.1384
 	zoom := 15
@@ -26,9 +24,11 @@ func main() {
 	lonEl := doc.Call("getElementById", "longitude")
 	buttonEl := doc.Call("getElementById", "updatePosition")
 
-	zoomEl.Set("value", strconv.Itoa(zoom))
-	latEl.Set("value", strconv.FormatFloat(lat, 'f', 6, 64))
-	lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
+	updateControls := func() {
+		zoomEl.Set("value", strconv.Itoa(zoom))
+		latEl.Set("value", strconv.FormatFloat(lat, 'f', 6, 64))
+		lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
+	}
 
 	canvasEl := doc.Call("getElementById", "mycanvas")
 	width := doc.Get("body").Get("clientWidth").Int()
@@ -40,6 +40,12 @@ func main() {
 	if gl == js.Undefined() {
 		gl = canvasEl.Call("getContext", "experimental-webgl")
 	}
+
+	cache, err := lru.New(1000)
+	if err != nil {
+		panic(err)
+	}
+
 	// once again
 	if gl == js.Undefined() {
 		js.Global().Call("alert", "browser might not support webgl")
@@ -101,16 +107,132 @@ func main() {
 
 		for _, t := range tiles {
 			currentTile := t
-			loadImage(gl, currentTile.URL.String(), func(txi *textureInfo) {
+			u := currentTile.URL.String()
+			v, ok := cache.Get(u)
+			if ok {
+				txi := v.(*textureInfo)
 				toDraw = append(toDraw, &drawInfo{
 					Texture: txi,
 					DX:      currentTile.DX,
 					DY:      currentTile.DY,
 				})
-				js.Global().Call("requestAnimationFrame", renderFrame)
-			})
+			} else {
+				txi := loadImage(gl, currentTile.URL.String(), func(txi *textureInfo) {
+					toDraw = append(toDraw, &drawInfo{
+						Texture: txi,
+						DX:      currentTile.DX,
+						DY:      currentTile.DY,
+					})
+					cache.Add(u, txi)
+					js.Global().Call("requestAnimationFrame", renderFrame)
+				})
+				cache.Add(u, txi)
+			}
 		}
+		js.Global().Call("requestAnimationFrame", renderFrame)
+		updateControls()
 	}
+
+	tlat := lat
+	tlon := lon
+	step := 0.0005
+	var anim func()
+	anim = func() {
+		if lat == tlat && lon == tlon {
+			return
+		}
+
+		if tlat > lat {
+			lat += step
+			if lat > tlat {
+				lat = tlat
+			}
+		} else {
+			lat -= step
+			if lat < tlat {
+				lat = tlat
+			}
+		}
+
+		if tlon > lon {
+			lon += step
+			if lon > tlon {
+				lon = tlon
+			}
+		} else {
+			lon -= step
+			if lon < tlon {
+				lon = tlon
+			}
+		}
+
+		update()
+		time.Sleep(10 * time.Millisecond)
+		go anim()
+	}
+
+	var (
+		mouseStartX   int
+		mouseStartY   int
+		mouseStartLat float64
+		mouseStartLon float64
+		mouseDown     = false
+	)
+
+	canvasEl.Set("onmousedown", js.NewCallback(func(v []js.Value) {
+		mouseStartX = v[0].Get("clientX").Int()
+		mouseStartY = v[0].Get("clientY").Int()
+		mouseStartLat = lat
+		mouseStartLon = lon
+		mouseDown = true
+	}))
+
+	canvasEl.Set("onmouseup", js.NewCallback(func(v []js.Value) {
+		mouseDown = false
+	}))
+
+	canvasEl.Set("onmousemove", js.NewCallback(func(v []js.Value) {
+		if !mouseDown {
+			return
+		}
+
+		dx := mouseStartX - v[0].Get("clientX").Int()
+		dy := mouseStartY - v[0].Get("clientY").Int()
+
+		lat, lon = pichiwmap.Move(zoom, mouseStartLat, mouseStartLon, dx, dy)
+		update()
+	}))
+
+	doc.Set("onkeyup", js.NewCallback(func(v []js.Value) {
+		tlat = lat
+		tlon = lon
+	}))
+
+	doc.Set("onkeydown", js.NewCallback(func(v []js.Value) {
+		e := v[0]
+		if e == js.Undefined() {
+			e = js.Global().Get("window").Get("event")
+		}
+
+		if e == js.Undefined() {
+			return
+		}
+
+		switch e.Get("keyCode").Int() {
+		case 38: // up
+			tlat += 0.001
+		case 40: // down
+			tlat -= 0.001
+		case 37: // left
+			tlon -= 0.001
+		case 39: // right
+			tlon += 0.001
+		default:
+			return
+		}
+
+		go anim()
+	}))
 
 	buttonEl.Set("onclick", js.NewCallback(func(v []js.Value) {
 		v[0].Call("preventDefault")
@@ -122,7 +244,7 @@ func main() {
 		zoom, err = strconv.Atoi(zoomEl.Get("value").String())
 		if err != nil {
 			zoom = lastZoom
-			zoomEl.Set("value", strconv.Itoa(zoom))
+			updateControls()
 			js.Global().Call("alert", "Invalid zoom (must be between 1 and 18)")
 			return
 		}
@@ -130,14 +252,14 @@ func main() {
 		lat, err = strconv.ParseFloat(latEl.Get("value").String(), 64)
 		if err != nil {
 			lat = lastLat
-			latEl.Set("value", strconv.FormatFloat(lat, 'f', 6, 64))
+			updateControls()
 			js.Global().Call("alert", "Invalid Lon Value")
 			return
 		}
 		lon, err = strconv.ParseFloat(lonEl.Get("value").String(), 64)
 		if err != nil {
 			lon = lastLon
-			lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
+			updateControls()
 			js.Global().Call("alert", "Invalid Lat Value")
 			return
 		}

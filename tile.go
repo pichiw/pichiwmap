@@ -78,6 +78,23 @@ func TileNum(zoom int, lat, lon float64) (x, y float64) {
 	return
 }
 
+// Move moves the lat and long by the delta pixels pdx and pdy
+func Move(zoom int, lat, lon float64, pdx int, pdy int) (nlat, nlon float64) {
+	xf, yf := TileNum(zoom, lat, lon)
+	dx := float64(pdx) / tileWidth
+	dy := float64(pdy) / tileHeight
+
+	return latlonFromXY(zoom, xf+dx, yf+dy)
+}
+
+func latlonFromXY(zoom int, x, y float64) (lat, lon float64) {
+	n := zooms[zoom]
+	lon = x/n*360.0 - 180.0
+	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*y/n)))
+	lat = latRad * RadToDeg
+	return
+}
+
 // NW returns the northwest corner of the tile in lat/lon degrees
 func NW(zoom, x, y int) (lat, lon float64) {
 	n := zooms[zoom]
