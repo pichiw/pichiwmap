@@ -16,30 +16,24 @@ func NewTileRenderer(canvasID string) (*TileRenderer, error) {
 		return nil, err
 	}
 
-	doc := js.Global().Get("document")
-	canvasEl := doc.Call("getElementById", "mycanvas")
-
-	gl := canvasEl.Call("getContext", "webgl")
-	if gl == js.Undefined() {
-		gl = canvasEl.Call("getContext", "experimental-webgl")
-	}
-	if gl == js.Undefined() {
-		return nil, ErrNoWebGL
-	}
-
-	program, err := createProgram(gl, vertexShaderSource, fragmentShaderSource)
+	gl, err := NewWebGL(canvasID)
 	if err != nil {
 		return nil, err
 	}
 
-	positionLocation := gl.Call("getAttribLocation", program, "a_position")
-	texcoordLocation := gl.Call("getAttribLocation", program, "a_texcoord")
+	program, err := gl.CreateProgramFromSource(vertexShaderSource, fragmentShaderSource)
+	if err != nil {
+		return nil, err
+	}
 
-	matrixLocation := gl.Call("getUniformLocation", program, "u_matrix")
-	textureLocation := gl.Call("getUniformLocation", program, "u_texture")
+	positionLocation := gl.GetAttribLocation(program, "a_position")
+	texcoordLocation := gl.GetAttribLocation(program, "a_texcoord")
 
-	positionBuffer := gl.Call("createBuffer")
-	gl.Call("bindBuffer", gl.Get("ARRAY_BUFFER"), positionBuffer)
+	matrixLocation := gl.GetUniformLocation(program, "u_matrix")
+	textureLocation := gl.GetUniformLocation(program, "u_texture")
+
+	positionBuffer := gl.CreateBuffer()
+	gl.BindBuffer(gl.ARRAY_BUFFER, positionBuffer)
 	positions := js.TypedArrayOf([]float32{
 		0, 0,
 		0, 1,
@@ -48,10 +42,10 @@ func NewTileRenderer(canvasID string) (*TileRenderer, error) {
 		0, 1,
 		1, 1,
 	})
-	gl.Call("bufferData", gl.Get("ARRAY_BUFFER"), positions, gl.Get("STATIC_DRAW"))
+	gl.BufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
 
-	texCoordBuffer := gl.Call("createBuffer")
-	gl.Call("bindBuffer", gl.Get("ARRAY_BUFFER"), texCoordBuffer)
+	texCoordBuffer := gl.CreateBuffer()
+	gl.BindBuffer(gl.ARRAY_BUFFER, texCoordBuffer)
 	texcoords := js.TypedArrayOf([]float32{
 		0, 0,
 		0, 1,
@@ -60,11 +54,10 @@ func NewTileRenderer(canvasID string) (*TileRenderer, error) {
 		0, 1,
 		1, 1,
 	})
-	gl.Call("bufferData", gl.Get("ARRAY_BUFFER"), texcoords, gl.Get("STATIC_DRAW"))
+	gl.BufferData(gl.ARRAY_BUFFER, texcoords, gl.STATIC_DRAW)
 
 	t := &TileRenderer{
 		gl:             gl,
-		m4:             js.Global().Get("m4"),
 		program:        program,
 		position:       positionLocation,
 		positionBuffer: positionBuffer,
@@ -81,8 +74,7 @@ func NewTileRenderer(canvasID string) (*TileRenderer, error) {
 }
 
 type TileRenderer struct {
-	gl             js.Value
-	m4             js.Value
+	gl             *WebGL
 	program        js.Value
 	position       js.Value
 	positionBuffer js.Value
@@ -96,18 +88,18 @@ type TileRenderer struct {
 }
 
 func (t *TileRenderer) Viewport() (width, height float64) {
-	width = t.gl.Get("canvas").Get("width").Float()
-	height = t.gl.Get("canvas").Get("height").Float()
+	width = t.gl.Canvas().Get("width").Float()
+	height = t.gl.Canvas().Get("height").Float()
 	return
 }
 
 func (t *TileRenderer) updateGl() {
 	cWidth, cHeight := t.Viewport()
 
-	t.gl.Call("viewport", 0, 0, cWidth, cHeight)
+	t.gl.Viewport(0, 0, cWidth, cHeight)
 
-	t.gl.Call("clearColor", 0, 0, 0, 0)
-	t.gl.Call("clear", t.gl.Get("COLOR_BUFFER_BIT"))
+	t.gl.ClearColor(0, 0, 0, 0)
+	t.gl.Clear(t.gl.COLOR_BUFFER_BIT)
 
 	centreX := cWidth / 2
 	centreY := cHeight / 2
@@ -154,24 +146,22 @@ func (t *TileRenderer) RenderTiles(tiles []*pichiwmap.Tile) {
 func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY float64) {
 	cwidth, cheight := t.Viewport()
 
-	t.gl.Call("bindTexture", t.gl.Get("TEXTURE_2D"), tex.Texture)
+	t.gl.BindTexture(t.gl.TEXTURE_2D, tex.Texture)
+	t.gl.UseProgram(t.program)
+	t.gl.BindBuffer(t.gl.ARRAY_BUFFER, t.positionBuffer)
+	t.gl.EnableVertexAttribArray(t.position)
+	t.gl.VertexAttribPointer(t.position, 2, t.gl.FLOAT, false, 0, 0)
+	t.gl.BindBuffer(t.gl.ARRAY_BUFFER, t.texcoordBuffer)
+	t.gl.EnableVertexAttribArray(t.texcoord)
+	t.gl.VertexAttribPointer(t.texcoord, 2, t.gl.FLOAT, false, 0, 0)
 
-	t.gl.Call("useProgram", t.program)
+	var matrix = t.gl.Orthographic(0, cwidth, cheight, 0, -1, 1)
+	matrix = t.gl.Translate(matrix, dstX, dstY, 0)
+	matrix = t.gl.Scale(matrix, float64(tex.Width), float64(tex.Height), 1)
 
-	t.gl.Call("bindBuffer", t.gl.Get("ARRAY_BUFFER"), t.positionBuffer)
-	t.gl.Call("enableVertexAttribArray", t.position)
-	t.gl.Call("vertexAttribPointer", t.position, 2, t.gl.Get("FLOAT"), false, 0, 0)
-	t.gl.Call("bindBuffer", t.gl.Get("ARRAY_BUFFER"), t.texcoordBuffer)
-	t.gl.Call("enableVertexAttribArray", t.texcoord)
-	t.gl.Call("vertexAttribPointer", t.texcoord, 2, t.gl.Get("FLOAT"), false, 0, 0)
-
-	var matrix = t.m4.Call("orthographic", 0, cwidth, cheight, 0, -1, 1)
-	matrix = t.m4.Call("translate", matrix, dstX, dstY, 0)
-	matrix = t.m4.Call("scale", matrix, tex.Width, tex.Height, 1)
-
-	t.gl.Call("uniformMatrix4fv", t.matrix, false, matrix)
-	t.gl.Call("uniform1i", t.texture, 0)
-	t.gl.Call("drawArrays", t.gl.Get("TRIANGLES"), 0, 6)
+	t.gl.UniformMatrix4fv(t.matrix, false, matrix)
+	t.gl.Uniform1i(t.texture, 0)
+	t.gl.DrawArrays(t.gl.TRIANGLES, 0, 6)
 }
 
 type textureInfo struct {
@@ -181,12 +171,12 @@ type textureInfo struct {
 }
 
 func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *textureInfo {
-	tex := t.gl.Call("createTexture")
-	t.gl.Call("bindTexture", t.gl.Get("TEXTURE_2D"), tex)
-	t.gl.Call("texImage2D", t.gl.Get("TEXTURE_2D"), 0, t.gl.Get("RGBA"), 1, 1, 0, t.gl.Get("RGBA"), t.gl.Get("UNSIGNED_BYTE"), js.TypedArrayOf([]uint8{0, 0, 255, 255}))
-	t.gl.Call("texParameteri", t.gl.Get("TEXTURE_2D"), t.gl.Get("TEXTURE_WRAP_S"), t.gl.Get("CLAMP_TO_EDGE"))
-	t.gl.Call("texParameteri", t.gl.Get("TEXTURE_2D"), t.gl.Get("TEXTURE_WRAP_T"), t.gl.Get("CLAMP_TO_EDGE"))
-	t.gl.Call("texParameteri", t.gl.Get("TEXTURE_2D"), t.gl.Get("TEXTURE_MIN_FILTER"), t.gl.Get("LINEAR"))
+	tex := t.gl.CreateTexture()
+	t.gl.BindTexture(t.gl.TEXTURE_2D, tex)
+	t.gl.TexImage2DColor(t.gl.TEXTURE_2D, 0, t.gl.RGBA, 1, 1, 0, t.gl.RGBA, t.gl.UNSIGNED_BYTE, js.TypedArrayOf([]uint8{0, 0, 255, 255}))
+	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_WRAP_S, t.gl.CLAMP_TO_EDGE)
+	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_WRAP_T, t.gl.CLAMP_TO_EDGE)
+	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_MIN_FILTER, t.gl.LINEAR)
 
 	txi := &textureInfo{
 		Width:   1,
@@ -199,8 +189,8 @@ func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *tex
 		txi.Width = img.Get("width").Int()
 		txi.Height = img.Get("height").Int()
 
-		t.gl.Call("bindTexture", t.gl.Get("TEXTURE_2D"), txi.Texture)
-		t.gl.Call("texImage2D", t.gl.Get("TEXTURE_2D"), 0, t.gl.Get("RGBA"), t.gl.Get("RGBA"), t.gl.Get("UNSIGNED_BYTE"), img)
+		t.gl.BindTexture(t.gl.TEXTURE_2D, txi.Texture)
+		t.gl.TexImage2DData(t.gl.TEXTURE_2D, 0, t.gl.RGBA, t.gl.RGBA, t.gl.UNSIGNED_BYTE, img)
 		onLoad(txi)
 	}))
 	img.Set("crossOrigin", "")
