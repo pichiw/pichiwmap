@@ -33,7 +33,7 @@ type Tile struct {
 }
 
 // TilesFromCenter gets the tiles required from the centre point
-func TilesFromCenter(baseURL *url.URL, zoom int, lat, lon float64, canvasWidth, canvasHeight int) []Tile {
+func TilesFromCenter(baseURL *url.URL, zoom int, lat, lon float64, canvasWidth, canvasHeight int) []*Tile {
 	cx, cy := TileNum(zoom, lat, lon)
 
 	tx := int(cx)
@@ -45,8 +45,8 @@ func TilesFromCenter(baseURL *url.URL, zoom int, lat, lon float64, canvasWidth, 
 	dx := -int(px * tileWidth)
 	dy := -int(py * tileHeight)
 
-	center := Tile{DX: dx, DY: dy, URL: URL(baseURL, zoom, tx, ty)}
-	tiles := []Tile{center}
+	center := &Tile{DX: dx, DY: dy, URL: URL(baseURL, zoom, tx, ty)}
+	tiles := []*Tile{center}
 
 	requiredWidth := int(math.Ceil(float64(canvasWidth)/tileWidth)) + 1
 	requiredHeight := int(math.Ceil(float64(canvasHeight)/tileHeight)) + 1
@@ -58,7 +58,7 @@ func TilesFromCenter(baseURL *url.URL, zoom int, lat, lon float64, canvasWidth, 
 			if cx == 0 && cy == 0 {
 				continue
 			}
-			tiles = append(tiles, Tile{
+			tiles = append(tiles, &Tile{
 				URL: URL(baseURL, zoom, tx+cx, ty+cy),
 				DX:  dx - (cx * tileWidth),
 				DY:  dy - (cy * tileHeight),
