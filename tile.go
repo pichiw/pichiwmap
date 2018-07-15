@@ -1,7 +1,6 @@
 package pichiwmap
 
 import (
-	"fmt"
 	"math"
 	"net/url"
 )
@@ -32,41 +31,8 @@ type Tile struct {
 	URL *url.URL
 }
 
-// TilesFromCenter gets the tiles required from the centre point
-func TilesFromCenter(baseURL *url.URL, zoom int, lat, lon float64, canvasWidth, canvasHeight int) []*Tile {
-	cx, cy := TileNum(zoom, lat, lon)
-
-	tx := int(cx)
-	ty := int(cy)
-
-	px := float64(tx) - cx
-	py := float64(ty) - cy
-
-	dx := -int(px * tileWidth)
-	dy := -int(py * tileHeight)
-
-	center := &Tile{DX: dx, DY: dy, URL: URL(baseURL, zoom, tx, ty)}
-	tiles := []*Tile{center}
-
-	requiredWidth := int(math.Ceil(float64(canvasWidth)/tileWidth)) + 1
-	requiredHeight := int(math.Ceil(float64(canvasHeight)/tileHeight)) + 1
-
-	startWidth := (requiredWidth / 2) - requiredWidth
-	startHeight := (requiredHeight / 2) - requiredHeight
-	for cx := startWidth; cx < (requiredWidth - startWidth); cx++ {
-		for cy := startHeight; cy < (requiredHeight - startHeight); cy++ {
-			if cx == 0 && cy == 0 {
-				continue
-			}
-			tiles = append(tiles, &Tile{
-				URL: URL(baseURL, zoom, tx+cx, ty+cy),
-				DX:  dx - (cx * tileWidth),
-				DY:  dy - (cy * tileHeight),
-			})
-		}
-	}
-
-	return tiles
+type URLer interface {
+	URL(zoom, x, y int) *url.URL
 }
 
 // TileNum returns the tile x and y and pixel offset from the zoom, lat, and lon
@@ -102,11 +68,4 @@ func NW(zoom, x, y int) (lat, lon float64) {
 	latRad := math.Atan(math.Sinh(math.Pi * (1 - 2*float64(y)/n)))
 	lat = latRad * RadToDeg
 	return
-}
-
-// URL generates a url for the tile from a base URL, zoom, lat, and lon
-func URL(baseURL *url.URL, zoom, x, y int) *url.URL {
-	mapURL := *baseURL
-	mapURL.Path = fmt.Sprintf("%v/%v/%v.png", zoom, x, y)
-	return &mapURL
 }

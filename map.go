@@ -1,7 +1,7 @@
 package pichiwmap
 
 import (
-	"net/url"
+	"math"
 	"time"
 
 	"github.com/gowasm/gopherwasm/js"
@@ -33,21 +33,24 @@ func (e MapEvents) wrapEmpty() MapEvents {
 }
 
 type TileRenderer interface {
-	RenderTiles(tiles []*Tile)
+	RenderTiles(tiles map[string]*Tile)
 	Viewport() (width, height float64)
 }
 
-func New(baseURL *url.URL, divEl js.Value, events MapEvents) (*Map, error) {
+func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	doc := js.Global().Get("document")
 	body := doc.Get("body")
 
 	viewport := doc.Call("createElement", "canvas")
 
-	width := divEl.Get("offsetWidth").Int()
-	height := divEl.Get("offsetHeight").Int()
+	onResize := func(event js.Value) {
+		width := divEl.Get("offsetWidth").Int()
+		height := divEl.Get("offsetHeight").Int()
+		viewport.Set("width", width)
+		viewport.Set("height", height)
+	}
 
-	viewport.Set("width", width)
-	viewport.Set("height", height)
+	onResize(js.Null())
 
 	divEl.Call("appendChild", viewport)
 
@@ -60,9 +63,15 @@ func New(baseURL *url.URL, divEl js.Value, events MapEvents) (*Map, error) {
 		lon:      -97.1384,
 		zoom:     15,
 		step:     0.001,
-		baseURL:  baseURL,
+		urlEr:    urlEr,
 		viewport: viewport,
 	}
+
+	window := js.Global().Get("window")
+	window.Call("addEventListener", "resize", js.NewEventCallback(0, func(event js.Value) {
+		onResize(event)
+		m.Update()
+	}))
 
 	m.tlat = m.Lat()
 	m.tlon = m.Lon()
@@ -88,7 +97,7 @@ type Map struct {
 	doc      js.Value
 	viewport js.Value
 
-	baseURL       *url.URL
+	urlEr         URLer
 	zoom          int
 	lat           float64
 	lon           float64
@@ -250,10 +259,50 @@ func (m *Map) onMouseMove(event js.Value) {
 	m.SetPosition(m.Zoom(), lat, lon)
 }
 
+// TilesFromCenter gets the tiles required from the centre point
+func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
+	cx, cy := TileNum(m.zoom, m.lat, m.lon)
+
+	tx := int(cx)
+	ty := int(cy)
+
+	px := float64(tx) - cx
+	py := float64(ty) - cy
+
+	dx := -int(px * tileWidth)
+	dy := -int(py * tileHeight)
+
+	center := &Tile{DX: dx, DY: dy, URL: m.urlEr.URL(m.zoom, tx, ty)}
+	tiles := map[string]*Tile{
+		center.URL.String(): center,
+	}
+
+	requiredWidth := int(math.Ceil(float64(canvasWidth)/tileWidth)) + 3
+	requiredHeight := int(math.Ceil(float64(canvasHeight)/tileHeight)) + 3
+
+	startWidth := (requiredWidth / 2) - requiredWidth
+	startHeight := (requiredHeight / 2) - requiredHeight
+	for cx := startWidth; cx < (requiredWidth - startWidth); cx++ {
+		for cy := startHeight; cy < (requiredHeight - startHeight); cy++ {
+			if cx == 0 && cy == 0 {
+				continue
+			}
+			t := &Tile{
+				URL: m.urlEr.URL(m.zoom, tx+cx, ty+cy),
+				DX:  dx - (cx * tileWidth),
+				DY:  dy - (cy * tileHeight),
+			}
+			tiles[t.URL.String()] = t
+		}
+	}
+
+	return tiles
+}
+
 func (m *Map) Update() {
 	for _, r := range m.tileRenderers {
 		width, height := r.Viewport()
-		tiles := TilesFromCenter(m.baseURL, m.Zoom(), m.Lat(), m.Lon(), int(width), int(height))
+		tiles := m.TilesFromCenter(int(width), int(height))
 		r.RenderTiles(tiles)
 	}
 }

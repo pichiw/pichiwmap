@@ -14,6 +14,11 @@ func main() {
 	doc := js.Global().Get("document")
 	divEl := doc.Call("getElementById", "mapid")
 
+	body := doc.Get("body")
+
+	divEl.Set("width", body.Get("clientWidth").Int())
+	divEl.Set("height", body.Get("clientHeight").Int())
+
 	zoomEl := doc.Call("getElementById", "zoom")
 	latEl := doc.Call("getElementById", "latitude")
 	lonEl := doc.Call("getElementById", "longitude")
@@ -36,7 +41,7 @@ func main() {
 		},
 	}
 
-	m, err := pichiwmap.New(baseURL, divEl, events)
+	m, err := pichiwmap.New(pichiwmap.NewOpenStreetMapURLer(baseURL), divEl, events)
 	if err != nil {
 		panic(err)
 	}

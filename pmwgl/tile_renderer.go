@@ -11,7 +11,7 @@ import (
 var ErrNoWebGL = errors.New("no webgl found")
 
 func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
-	cache, err := lru.New(1000)
+	cache, err := lru.New(500)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,12 @@ func (t *TileRenderer) updateGl() {
 
 }
 
-func (t *TileRenderer) RenderTiles(tiles []*pichiwmap.Tile) {
+func (t *TileRenderer) RenderTiles(tiles map[string]*pichiwmap.Tile) {
+	for _, td := range t.toDraw {
+		if _, ok := tiles[td.Texture.URL]; !ok {
+			td.Texture.Cancel()
+		}
+	}
 	t.toDraw = nil
 
 	for _, tile := range tiles {
@@ -129,6 +134,9 @@ func (t *TileRenderer) RenderTiles(tiles []*pichiwmap.Tile) {
 			})
 		} else {
 			txi := t.loadImage(currentTile.URL.String(), func(txi *textureInfo) {
+				if txi.Cancelled {
+					t.cache.Remove(u)
+				}
 				t.toDraw = append(t.toDraw, &drawInfo{
 					Texture: txi,
 					DX:      currentTile.DX,
@@ -165,9 +173,20 @@ func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY float64) {
 }
 
 type textureInfo struct {
-	Width   int // we don't know the size until it loads
-	Height  int
-	Texture js.Value
+	URL       string
+	Width     int // we don't know the size until it loads
+	Height    int
+	Texture   js.Value
+	Image     js.Value
+	Loaded    bool
+	Cancelled bool
+	Callback  js.Callback
+}
+
+func (t *textureInfo) Cancel() {
+	t.Image.Set("src", "")
+	t.Cancelled = true
+	t.Callback.Release()
 }
 
 func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *textureInfo {
@@ -179,22 +198,29 @@ func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *tex
 	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_MIN_FILTER, t.gl.LINEAR)
 
 	txi := &textureInfo{
+		URL:     url,
 		Width:   1,
 		Height:  1,
 		Texture: tex,
+		Image:   js.Global().Get("Image").New(),
 	}
 
-	img := js.Global().Get("Image").New()
-	img.Call("addEventListener", "load", js.NewCallback(func(args []js.Value) {
-		txi.Width = img.Get("width").Int()
-		txi.Height = img.Get("height").Int()
+	txi.Callback = js.NewEventCallback(0, func(event js.Value) {
+		if txi.Cancelled {
+			return
+		}
+		txi.Loaded = true
+		txi.Width = txi.Image.Get("width").Int()
+		txi.Height = txi.Image.Get("height").Int()
 
 		t.gl.BindTexture(t.gl.TEXTURE_2D, txi.Texture)
-		t.gl.TexImage2DData(t.gl.TEXTURE_2D, 0, t.gl.RGBA, t.gl.RGBA, t.gl.UNSIGNED_BYTE, img)
+		t.gl.TexImage2DData(t.gl.TEXTURE_2D, 0, t.gl.RGBA, t.gl.RGBA, t.gl.UNSIGNED_BYTE, txi.Image)
 		onLoad(txi)
-	}))
-	img.Set("crossOrigin", "")
-	img.Set("src", url)
+	})
+
+	txi.Image.Call("addEventListener", "load", txi.Callback)
+	txi.Image.Set("crossOrigin", "")
+	txi.Image.Set("src", url)
 	return txi
 }
 
