@@ -101,22 +101,25 @@ type Map struct {
 	doc      js.Value
 	viewport js.Value
 
-	urlEr         URLer
-	zoom          float64
-	zoomStep      float64
-	lat           float64
-	lon           float64
-	tlat          float64
-	tlon          float64
-	step          float64
-	mouseStartX   int
-	mouseStartY   int
-	mouseStartLat float64
-	mouseStartLon float64
-	mouseDown     bool
-	arrowDown     bool
-	maxZoom       float64
-	minZoom       float64
+	urlEr          URLer
+	zoom           float64
+	zoomStep       float64
+	lat            float64
+	lon            float64
+	tlat           float64
+	tlon           float64
+	step           float64
+	pinchZoomStart float64
+	pinchDelta     float64
+	pinchDown      bool
+	mouseStartX    int
+	mouseStartY    int
+	mouseStartLat  float64
+	mouseStartLon  float64
+	mouseDown      bool
+	arrowDown      bool
+	maxZoom        float64
+	minZoom        float64
 }
 
 func (m *Map) Zoom() float64 {
@@ -265,9 +268,35 @@ func (m *Map) onKeyUp(event js.Value) {
 	m.arrowDown = false
 }
 
+func pinchDelta(touches js.Value) float64 {
+	if touches.Length() <= 1 {
+		return 0
+	}
+	t1 := touches.Index(0)
+	t2 := touches.Index(1)
+
+	x1 := t1.Get("pageX").Float()
+	y1 := t1.Get("pageY").Float()
+
+	x2 := t2.Get("pageX").Float()
+	y2 := t2.Get("pageY").Float()
+
+	lx := math.Abs(x1 - x2)
+	ly := math.Abs(y1 - y2)
+
+	return math.Sqrt(math.Pow(lx, 2) + math.Pow(ly, 2))
+}
+
 func (m *Map) onMouseDown(event js.Value) {
 	if touches := event.Get("touches"); touches != js.Undefined() {
-		event = touches.Index(0)
+		if touches.Length() > 1 {
+			m.pinchZoomStart = m.zoom
+			m.pinchDelta = pinchDelta(touches)
+			m.pinchDown = true
+			return
+		} else {
+			event = touches.Index(0)
+		}
 	}
 	m.mouseStartX = event.Get("pageX").Int()
 	m.mouseStartY = event.Get("pageY").Int()
@@ -278,14 +307,21 @@ func (m *Map) onMouseDown(event js.Value) {
 
 func (m *Map) onMouseUp(event js.Value) {
 	m.mouseDown = false
+	m.pinchDown = false
 }
 
 func (m *Map) onMouseMove(event js.Value) {
-	if !m.mouseDown {
+	if !m.mouseDown && !m.pinchDown {
 		return
 	}
 
 	if touches := event.Get("touches"); touches != js.Undefined() {
+		if touches.Length() > 1 && m.pinchDown {
+			npd := pinchDelta(touches)
+			zoom := (m.pinchDelta - npd) / 100
+			m.SetPosition(m.pinchZoomStart-zoom, m.Lat(), m.Lon())
+			return
+		}
 		event = touches.Index(0)
 	}
 	dx := m.mouseStartX - event.Get("pageX").Int()
