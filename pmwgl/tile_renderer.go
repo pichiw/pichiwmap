@@ -11,7 +11,7 @@ import (
 var ErrNoWebGL = errors.New("no webgl found")
 
 func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
-	cache, err := lru.New(500)
+	cache, err := lru.New(150)
 	if err != nil {
 		return nil, err
 	}
@@ -137,12 +137,12 @@ func (t *TileRenderer) RenderTiles(tiles map[string]*pichiwmap.Tile) {
 				if txi.Cancelled {
 					t.cache.Remove(u)
 				}
+				txi.Loaded = true
 				t.toDraw = append(t.toDraw, &drawInfo{
 					Texture: txi,
 					DX:      currentTile.DX,
 					DY:      currentTile.DY,
 				})
-				t.cache.Add(u, txi)
 				js.Global().Call("requestAnimationFrame", t.renderFrame)
 			})
 			t.cache.Add(u, txi)
@@ -184,6 +184,9 @@ type textureInfo struct {
 }
 
 func (t *textureInfo) Cancel() {
+	if t.Loaded {
+		return // Don't cancel if it's already loaded!
+	}
 	t.Image.Set("src", "")
 	t.Cancelled = true
 	t.Callback.Release()
@@ -206,10 +209,9 @@ func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *tex
 	}
 
 	txi.Callback = js.NewEventCallback(0, func(event js.Value) {
-		if txi.Cancelled {
+		if txi.Cancelled && !txi.Loaded {
 			return
 		}
-		txi.Loaded = true
 		txi.Width = txi.Image.Get("width").Int()
 		txi.Height = txi.Image.Get("height").Int()
 

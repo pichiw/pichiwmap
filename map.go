@@ -272,23 +272,19 @@ func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
 	dx := -int(px * tileWidth)
 	dy := -int(py * tileHeight)
 
-	center := &Tile{DX: dx, DY: dy, URL: m.urlEr.URL(m.zoom, tx, ty)}
-	tiles := map[string]*Tile{
-		center.URL.String(): center,
-	}
+	tiles := map[string]*Tile{}
 
-	requiredWidth := int(math.Ceil(float64(canvasWidth)/tileWidth)) + 3
-	requiredHeight := int(math.Ceil(float64(canvasHeight)/tileHeight)) + 3
+	requiredWidth := int(math.Ceil(float64(canvasWidth)/tileWidth)) + 1
+	requiredHeight := int(math.Ceil(float64(canvasHeight)/tileHeight)) + 1
 
-	startWidth := (requiredWidth / 2) - requiredWidth
-	startHeight := (requiredHeight / 2) - requiredHeight
-	for cx := startWidth; cx < (requiredWidth - startWidth); cx++ {
-		for cy := startHeight; cy < (requiredHeight - startHeight); cy++ {
-			if cx == 0 && cy == 0 {
-				continue
-			}
+	startX := -(requiredWidth / 2)
+	startY := -(requiredHeight / 2)
+	endX := startX + requiredWidth
+	endY := startY + requiredHeight
+	for cx := startX; cx < endX; cx++ {
+		for cy := startY; cy < endY; cy++ {
 			t := &Tile{
-				URL: m.urlEr.URL(m.zoom, tx+cx, ty+cy),
+				URL: m.urlEr.URL(m.zoom, cx+tx, cy+ty),
 				DX:  dx - (cx * tileWidth),
 				DY:  dy - (cy * tileHeight),
 			}
