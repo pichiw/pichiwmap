@@ -9,17 +9,17 @@ Right this package is very experimental and most rendering logic is proof-of-con
 ## Done
 
 - Basic map rendering sample (cmd/sample)
-- Gesture / mouse panning
+- Gesture / mouse panning and zooming
 - Manual lat/lon/zoom entry
 - Animtated keyboard panning
-
-## TODO
-
-- Gesture / mouse zooming
 - Abstract the map logic from the rendering logic
   - Push all map logic into the "pichiwmap" package and a "pmwebgl" implementation of the renderer. 
   - Make UX friendly (`map, err := NewMap("divid")`)
-- Refinement of cache/loading
+
+## TODO
+
+- Handle edge of the decidedly non-flat Earth.
+- Refinement of cache/loading (on-going)
 - Markers, polygons, etc. 
 - JavaScript hooks to allow non-wasm/go programmers to utilize the map
 

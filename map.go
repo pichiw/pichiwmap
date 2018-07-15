@@ -327,8 +327,13 @@ func (m *Map) onMouseMove(event js.Value) {
 	dx := m.mouseStartX - event.Get("pageX").Int()
 	dy := m.mouseStartY - event.Get("pageY").Int()
 
-	lat, lon := Move(int(m.Zoom()), m.mouseStartLat, m.mouseStartLon, dx, dy)
+	lat, lon := Move(m.Zoom(), m.mouseStartLat, m.mouseStartLon, dx, dy)
 	m.SetPosition(m.Zoom(), lat, lon)
+}
+
+func scale(zoom float64) float64 {
+	iz := int(zoom)
+	return 1 + (0.5 + (zoom - float64(iz)))
 }
 
 // TilesFromCenter gets the tiles required from the centre point
@@ -341,8 +346,8 @@ func (m *Map) TilesFromCenter(zoom float64, canvasWidth, canvasHeight int) map[s
 	px := float64(tx) - cx
 	py := float64(ty) - cy
 
-	iz := int(zoom)
-	scale := 1 + (0.5 + (zoom - float64(iz)))
+	scale := scale(zoom)
+
 	dx := -int(px * TileWidth * scale)
 	dy := -int(py * TileHeight * scale)
 

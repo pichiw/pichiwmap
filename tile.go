@@ -47,12 +47,13 @@ func TileNum(zoom int, lat, lon float64) (x, y float64) {
 }
 
 // Move moves the lat and long by the delta pixels pdx and pdy
-func Move(zoom int, lat, lon float64, pdx int, pdy int) (nlat, nlon float64) {
-	xf, yf := TileNum(zoom, lat, lon)
+func Move(zoom, lat, lon float64, pdx int, pdy int) (nlat, nlon float64) {
+	scale := scale(zoom)
+	xf, yf := TileNum(int(zoom), lat, lon)
 	dx := float64(pdx) / TileWidth
 	dy := float64(pdy) / TileHeight
 
-	return latlonFromXY(zoom, xf+dx, yf+dy)
+	return latlonFromXY(int(zoom), xf+(dx/scale), yf+(dy/scale))
 }
 
 func latlonFromXY(zoom int, x, y float64) (lat, lon float64) {
