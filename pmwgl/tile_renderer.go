@@ -1,7 +1,6 @@
 package pmwgl
 
 import (
-	"errors"
 	"sync"
 	"syscall/js"
 
@@ -9,8 +8,7 @@ import (
 	"github.com/pichiw/pichiwmap"
 )
 
-var ErrNoWebGL = errors.New("no webgl found")
-
+// NewTileRenderer creates a new tile renderer
 func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
 	cache, err := lru.New(150)
 	if err != nil {
@@ -34,7 +32,7 @@ func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
 	textureLocation := gl.GetUniformLocation(program, "u_texture")
 
 	positionBuffer := gl.CreateBuffer()
-	gl.BindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+	gl.BindBuffer(gl.ArrayBuffer, positionBuffer)
 	positions := js.TypedArrayOf([]float32{
 		0, 0,
 		0, 1,
@@ -43,10 +41,10 @@ func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
 		0, 1,
 		1, 1,
 	})
-	gl.BufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW)
+	gl.BufferData(gl.ArrayBuffer, positions, gl.StaticDraw)
 
 	texCoordBuffer := gl.CreateBuffer()
-	gl.BindBuffer(gl.ARRAY_BUFFER, texCoordBuffer)
+	gl.BindBuffer(gl.ArrayBuffer, texCoordBuffer)
 	texcoords := js.TypedArrayOf([]float32{
 		0, 0,
 		0, 1,
@@ -55,7 +53,7 @@ func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
 		0, 1,
 		1, 1,
 	})
-	gl.BufferData(gl.ARRAY_BUFFER, texcoords, gl.STATIC_DRAW)
+	gl.BufferData(gl.ArrayBuffer, texcoords, gl.StaticDraw)
 
 	t := &TileRenderer{
 		gl:             gl,
@@ -74,6 +72,7 @@ func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
 	return t, nil
 }
 
+// TileRenderer will render tiles onto a canvas using webgl
 type TileRenderer struct {
 	gl             *WebGL
 	program        js.Value
@@ -88,6 +87,7 @@ type TileRenderer struct {
 	renderFrame    js.Callback
 }
 
+// Viewport returns the current width and height of the tile renderer's viewport
 func (t *TileRenderer) Viewport() (width, height float64) {
 	width = t.gl.Canvas().Get("width").Float()
 	height = t.gl.Canvas().Get("height").Float()
@@ -100,7 +100,7 @@ func (t *TileRenderer) updateGl() {
 	t.gl.Viewport(0, 0, cWidth, cHeight)
 
 	t.gl.ClearColor(0, 0, 0, 0)
-	t.gl.Clear(t.gl.COLOR_BUFFER_BIT)
+	t.gl.Clear(t.gl.ColorBufferBit)
 
 	centreX := cWidth / 2
 	centreY := cHeight / 2
@@ -112,10 +112,11 @@ func (t *TileRenderer) updateGl() {
 			td.Scale,
 		)
 	}
-
 }
 
+// RenderTiles will render the given tiles at the current zoom level
 func (t *TileRenderer) RenderTiles(zoom int, tiles map[string]*pichiwmap.Tile) {
+	// Cancel any loads that are no longer necessary
 	for _, td := range t.toDraw {
 		if _, ok := tiles[td.Texture.URL]; !ok {
 			if td.Texture.Cancel() {
@@ -161,14 +162,14 @@ func (t *TileRenderer) requestAnimationFrame() {
 func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY, scale float64) {
 	cwidth, cheight := t.Viewport()
 
-	t.gl.BindTexture(t.gl.TEXTURE_2D, tex.Texture)
+	t.gl.BindTexture(t.gl.Texture2D, tex.Texture)
 	t.gl.UseProgram(t.program)
-	t.gl.BindBuffer(t.gl.ARRAY_BUFFER, t.positionBuffer)
+	t.gl.BindBuffer(t.gl.ArrayBuffer, t.positionBuffer)
 	t.gl.EnableVertexAttribArray(t.position)
-	t.gl.VertexAttribPointer(t.position, 2, t.gl.FLOAT, false, 0, 0)
-	t.gl.BindBuffer(t.gl.ARRAY_BUFFER, t.texcoordBuffer)
+	t.gl.VertexAttribPointer(t.position, 2, t.gl.Float, false, 0, 0)
+	t.gl.BindBuffer(t.gl.ArrayBuffer, t.texcoordBuffer)
 	t.gl.EnableVertexAttribArray(t.texcoord)
-	t.gl.VertexAttribPointer(t.texcoord, 2, t.gl.FLOAT, false, 0, 0)
+	t.gl.VertexAttribPointer(t.texcoord, 2, t.gl.Float, false, 0, 0)
 
 	var matrix = t.gl.Orthographic(0, cwidth, cheight, 0, -1, 1)
 	matrix = t.gl.Translate(matrix, dstX, dstY, 0)
@@ -176,27 +177,20 @@ func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY, scale float64) {
 
 	t.gl.UniformMatrix4fv(t.matrix, false, matrix)
 	t.gl.Uniform1i(t.texture, 0)
-	t.gl.DrawArrays(t.gl.TRIANGLES, 0, 6)
+	t.gl.DrawArrays(t.gl.Triangles, 0, 6)
 }
 
 type textureInfo struct {
-	m           sync.Mutex
-	URL         string
-	Width       int // we don't know the size until it loads
-	Height      int
-	Texture     js.Value
-	Image       js.Value
-	Loaded      bool
-	Cancelled   bool
-	Callback    js.Callback
-	releaseOnce sync.Once
+	m         sync.Mutex
+	URL       string
+	Width     int // we don't know the size until it loads
+	Height    int
+	Texture   js.Value
+	Image     js.Value
+	Loaded    bool
+	Cancelled bool
 }
 
-func (t *textureInfo) Release() {
-	t.releaseOnce.Do(func() {
-		//t.Callback.Release()
-	})
-}
 func (t *textureInfo) Cancel() bool {
 	t.m.Lock()
 	defer t.m.Unlock()
@@ -204,7 +198,6 @@ func (t *textureInfo) Cancel() bool {
 	if t.Loaded || t.Cancelled {
 		return false // Don't cancel if it's already loaded!
 	}
-	t.Release()
 	t.Cancelled = true
 	t.Image.Set("src", "")
 	return true
@@ -227,11 +220,11 @@ func init() {
 
 func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *textureInfo {
 	tex := t.gl.CreateTexture()
-	t.gl.BindTexture(t.gl.TEXTURE_2D, tex)
-	t.gl.TexImage2DColor(t.gl.TEXTURE_2D, 0, t.gl.RGBA, pichiwmap.TileWidth, pichiwmap.TileHeight, 0, t.gl.RGBA, t.gl.UNSIGNED_BYTE, blankTexture)
-	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_WRAP_S, t.gl.CLAMP_TO_EDGE)
-	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_WRAP_T, t.gl.CLAMP_TO_EDGE)
-	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_MIN_FILTER, t.gl.LINEAR)
+	t.gl.BindTexture(t.gl.Texture2D, tex)
+	t.gl.TexImage2DColor(t.gl.Texture2D, 0, t.gl.RGBA, pichiwmap.TileWidth, pichiwmap.TileHeight, 0, t.gl.RGBA, t.gl.UnsignedByte, blankTexture)
+	t.gl.TexParameteri(t.gl.Texture2D, t.gl.TextureWrapS, t.gl.ClampToEdge)
+	t.gl.TexParameteri(t.gl.Texture2D, t.gl.TextureWrapT, t.gl.ClampToEdge)
+	t.gl.TexParameteri(t.gl.Texture2D, t.gl.TextureMinFilter, t.gl.Linear)
 
 	txi := &textureInfo{
 		URL:     url,
@@ -241,22 +234,19 @@ func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *tex
 		Image:   js.Global().Get("Image").New(),
 	}
 
-	txi.Callback = js.NewEventCallback(0, func(event js.Value) {
+	txi.Image.Call("addEventListener", "load", js.NewEventCallback(0, func(event js.Value) {
 		txi.m.Lock()
 		defer txi.m.Unlock()
 
-		txi.Release()
 		txi.Loaded = true
 
 		txi.Width = txi.Image.Get("width").Int()
 		txi.Height = txi.Image.Get("height").Int()
 
-		t.gl.BindTexture(t.gl.TEXTURE_2D, txi.Texture)
-		t.gl.TexImage2DData(t.gl.TEXTURE_2D, 0, t.gl.RGBA, t.gl.RGBA, t.gl.UNSIGNED_BYTE, txi.Image)
+		t.gl.BindTexture(t.gl.Texture2D, txi.Texture)
+		t.gl.TexImage2DData(t.gl.Texture2D, 0, t.gl.RGBA, t.gl.RGBA, t.gl.UnsignedByte, txi.Image)
 		onLoad(txi)
-	})
-
-	txi.Image.Call("addEventListener", "load", txi.Callback)
+	}))
 	txi.Image.Set("crossOrigin", "")
 	txi.Image.Set("src", url)
 	return txi

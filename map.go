@@ -8,11 +8,15 @@ import (
 )
 
 type (
-	OnLatChanged  func(lat float64)
-	OnLonChanged  func(lon float64)
+	// OnLatChanged is fired whent he latitude changes
+	OnLatChanged func(lat float64)
+	// OnLonChanged is fired when the longitude changes
+	OnLonChanged func(lon float64)
+	// OnZoomChanged is fired when the zoom changes
 	OnZoomChanged func(zoom float64)
 )
 
+// MapEvents wraps all map events into a convenient type
 type MapEvents struct {
 	OnLatChanged  OnLatChanged
 	OnLonChanged  OnLonChanged
@@ -32,14 +36,14 @@ func (e MapEvents) wrapEmpty() MapEvents {
 	return e
 }
 
+// TileRenderer is anything that can render tiles
 type TileRenderer interface {
 	RenderTiles(zoom int, tiles map[string]*Tile)
-	Viewport() (width, height float64)
 }
 
+// New creates a new map at the specified dib
 func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	doc := js.Global().Get("document")
-	// body := doc.Get("body")
 
 	viewport := doc.Call("createElement", "canvas")
 
@@ -53,9 +57,6 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	onResize(js.Null())
 
 	divEl.Call("appendChild", viewport)
-
-	// body.Call("addEventListener", "gesturechange", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
-	// body.Call("addEventListener", "gesturestart", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
 
 	m := &Map{
 		events:   events.wrapEmpty(),
@@ -82,9 +83,10 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	m.viewport.Call("addEventListener", "mousedown", js.NewEventCallback(js.PreventDefault, m.onMouseDown), false)
 	m.viewport.Call("addEventListener", "mouseup", js.NewEventCallback(js.PreventDefault, m.onMouseUp), false)
 	m.viewport.Call("addEventListener", "mousemove", js.NewEventCallback(js.PreventDefault, m.onMouseMove), false)
-	m.viewport.Call("addEventListener", "touchstart", js.NewEventCallback(js.PreventDefault, m.onMouseDown), false)
-	m.viewport.Call("addEventListener", "touchend", js.NewEventCallback(js.PreventDefault, m.onMouseUp), false)
-	m.viewport.Call("addEventListener", "touchmove", js.NewEventCallback(js.PreventDefault, m.onMouseMove), false)
+
+	m.viewport.Call("addEventListener", "touchstart", js.NewEventCallback(js.PreventDefault, m.onTouchStart), false)
+	m.viewport.Call("addEventListener", "touchend", js.NewEventCallback(js.PreventDefault, m.onTouchEnd), false)
+	m.viewport.Call("addEventListener", "touchmove", js.NewEventCallback(js.PreventDefault, m.onTouchMove), false)
 
 	doc.Call("addEventListener", "keyup", js.NewEventCallback(js.PreventDefault, m.onKeyUp), false)
 	doc.Call("addEventListener", "keydown", js.NewEventCallback(js.PreventDefault, m.onKeyDown), false)
@@ -93,6 +95,7 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	return m, nil
 }
 
+// Map represents a map
 type Map struct {
 	tileRenderers []TileRenderer
 
@@ -122,6 +125,7 @@ type Map struct {
 	minZoom        float64
 }
 
+// Zoom returns the current zoom
 func (m *Map) Zoom() float64 {
 	return m.zoom
 }
@@ -134,6 +138,7 @@ func (m *Map) setZoom(zoom float64) {
 	m.events.OnZoomChanged(zoom)
 }
 
+// Lat returns the current latitude
 func (m *Map) Lat() float64 {
 	return m.lat
 }
@@ -146,6 +151,7 @@ func (m *Map) setLat(lat float64) {
 	m.events.OnLatChanged(lat)
 }
 
+// Lon returns the current longitude
 func (m *Map) Lon() float64 {
 	return m.lon
 }
@@ -158,6 +164,7 @@ func (m *Map) setLon(lon float64) {
 	m.events.OnLonChanged(lon)
 }
 
+// SetPosition sets the current zoom, latitude, and longitude of the map
 func (m *Map) SetPosition(zoom, lat, lon float64) {
 	if zoom < m.minZoom || zoom > m.maxZoom {
 		return
@@ -177,10 +184,12 @@ func (m *Map) SetPosition(zoom, lat, lon float64) {
 	m.Update(zooming)
 }
 
+// AddTileRenderers adds tile renderers to the map
 func (m *Map) AddTileRenderers(tr ...TileRenderer) {
 	m.tileRenderers = append(m.tileRenderers, tr...)
 }
 
+// Canvas returns the canvas the map is being drawn onto
 func (m *Map) Canvas() js.Value {
 	return m.viewport
 }
@@ -287,17 +296,51 @@ func pinchDelta(touches js.Value) float64 {
 	return math.Sqrt(math.Pow(lx, 2) + math.Pow(ly, 2))
 }
 
-func (m *Map) onMouseDown(event js.Value) {
-	if touches := event.Get("touches"); touches != js.Undefined() {
-		if touches.Length() > 1 {
-			m.pinchZoomStart = m.zoom
-			m.pinchDelta = pinchDelta(touches)
-			m.pinchDown = true
-			return
-		} else {
-			event = touches.Index(0)
-		}
+func (m *Map) onTouchStart(event js.Value) {
+	touches := event.Get("touches")
+	if touches == js.Undefined() {
+		return
 	}
+
+	if touches.Length() == 1 {
+		m.onMouseDown(touches.Index(0))
+		return
+	}
+
+	if touches.Length() != 2 {
+		return
+	}
+
+	m.pinchZoomStart = m.zoom
+	m.pinchDelta = pinchDelta(touches)
+	m.pinchDown = true
+}
+
+func (m *Map) onTouchEnd(event js.Value) {
+	m.pinchDown = false
+}
+
+func (m *Map) onTouchMove(event js.Value) {
+	touches := event.Get("touches")
+	if touches == js.Undefined() {
+		return
+	}
+
+	if touches.Length() == 1 {
+		m.onMouseMove(touches.Index(0))
+		return
+	}
+
+	if !m.pinchDown || touches.Length() != 2 {
+		return
+	}
+
+	npd := pinchDelta(touches)
+	zoom := (m.pinchDelta - npd) / 100
+	m.SetPosition(m.pinchZoomStart-zoom, m.Lat(), m.Lon())
+}
+
+func (m *Map) onMouseDown(event js.Value) {
 	m.mouseStartX = event.Get("pageX").Int()
 	m.mouseStartY = event.Get("pageY").Int()
 	m.mouseStartLat = m.Lat()
@@ -311,19 +354,10 @@ func (m *Map) onMouseUp(event js.Value) {
 }
 
 func (m *Map) onMouseMove(event js.Value) {
-	if !m.mouseDown && !m.pinchDown {
+	if !m.mouseDown {
 		return
 	}
 
-	if touches := event.Get("touches"); touches != js.Undefined() {
-		if touches.Length() > 1 && m.pinchDown {
-			npd := pinchDelta(touches)
-			zoom := (m.pinchDelta - npd) / 100
-			m.SetPosition(m.pinchZoomStart-zoom, m.Lat(), m.Lon())
-			return
-		}
-		event = touches.Index(0)
-	}
 	dx := m.mouseStartX - event.Get("pageX").Int()
 	dy := m.mouseStartY - event.Get("pageY").Int()
 
@@ -336,7 +370,7 @@ func scale(zoom float64) float64 {
 	return 1 + (0.5 + (zoom - float64(iz)))
 }
 
-// TilesFromCenter gets the tiles required from the centre point
+// TilesFromCenter gets the tiles required from the current centre point
 func (m *Map) TilesFromCenter(zoom float64, canvasWidth, canvasHeight int) map[string]*Tile {
 	cx, cy := TileNum(int(zoom), m.lat, m.lon)
 
@@ -376,14 +410,17 @@ func (m *Map) TilesFromCenter(zoom float64, canvasWidth, canvasHeight int) map[s
 	return tiles
 }
 
+// Zooming specifies whether or not the map is currently zooming
 type Zooming byte
 
+// Possible values for zooming
 const (
 	ZoomingZero Zooming = iota
 	ZoomingIn
 	ZoomingOut
 )
 
+// Update will repaint the map
 func (m *Map) Update(zooming Zooming) {
 	zoomStart := m.zoom
 	zoomEnd := m.zoom
@@ -395,17 +432,18 @@ func (m *Map) Update(zooming Zooming) {
 		zoomEnd++
 	}
 
-	for _, r := range m.tileRenderers {
-		tiles := map[string]*Tile{}
-		width, height := r.Viewport()
+	width := m.viewport.Get("width").Int()
+	height := m.viewport.Get("height").Int()
+	tiles := map[string]*Tile{}
+	for zoom := zoomStart; zoom <= zoomEnd; zoom++ {
+		ztiles := m.TilesFromCenter(zoom, int(width), int(height))
 
-		for zoom := zoomStart; zoom <= zoomEnd; zoom++ {
-			ztiles := m.TilesFromCenter(zoom, int(width), int(height))
-
-			for k, v := range ztiles {
-				tiles[k] = v
-			}
+		for k, v := range ztiles {
+			tiles[k] = v
 		}
+	}
+
+	for _, r := range m.tileRenderers {
 		r.RenderTiles(int(m.zoom), tiles)
 	}
 }

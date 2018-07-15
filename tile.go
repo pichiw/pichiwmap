@@ -5,11 +5,10 @@ import (
 	"net/url"
 )
 
+// Converts for degrees and radians
 const (
-	RadToDeg  = 180 / math.Pi
-	DegToRad  = math.Pi / 180
-	RadToGrad = 200 / math.Pi
-	GradToDeg = math.Pi / 200
+	RadToDeg = 180 / math.Pi
+	DegToRad = math.Pi / 180
 )
 
 var zooms = map[int]float64{}
@@ -20,19 +19,27 @@ func init() {
 	}
 }
 
+// Tile widths and heights
 const (
 	TileWidth  = 256
 	TileHeight = 256
 )
 
+// Tile represents a tile to be rendered
 type Tile struct {
-	DX    int
-	DY    int
+	// DX is the delta of X from the center of the canvas
+	DX int
+	// DY is the delta of Y from the center of the canvas
+	DY int
+	// The current scale of the tile
 	Scale float64
-	URL   *url.URL
-	Zoom  int
+	// The URL where we can load the tile
+	URL *url.URL
+	// The zoom level of the tile
+	Zoom int
 }
 
+// URLer is anything that can generate a URL from a zoom, x, and y value
 type URLer interface {
 	URL(zoom, x, y int) *url.URL
 }
