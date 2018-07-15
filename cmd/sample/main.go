@@ -61,7 +61,7 @@ func main() {
 
 	c := make(chan struct{}, 0)
 
-	m.Update()
+	m.Update(pichiwmap.ZoomingZero)
 
 	<-c
 }

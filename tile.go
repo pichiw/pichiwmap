@@ -30,6 +30,7 @@ type Tile struct {
 	DY    int
 	Scale float64
 	URL   *url.URL
+	Zoom  int
 }
 
 type URLer interface {

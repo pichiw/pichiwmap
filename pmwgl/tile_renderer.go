@@ -115,7 +115,7 @@ func (t *TileRenderer) updateGl() {
 
 }
 
-func (t *TileRenderer) RenderTiles(tiles map[string]*pichiwmap.Tile) {
+func (t *TileRenderer) RenderTiles(zoom int, tiles map[string]*pichiwmap.Tile) {
 	for _, td := range t.toDraw {
 		if _, ok := tiles[td.Texture.URL]; !ok {
 			if td.Texture.Cancel() {
@@ -138,12 +138,14 @@ func (t *TileRenderer) RenderTiles(tiles map[string]*pichiwmap.Tile) {
 			t.cache.Add(u, txi)
 		}
 
-		t.toDraw = append(t.toDraw, &drawInfo{
-			Texture: txi,
-			DX:      tile.DX,
-			DY:      tile.DY,
-			Scale:   tile.Scale,
-		})
+		if tile.Zoom == zoom {
+			t.toDraw = append(t.toDraw, &drawInfo{
+				Texture: txi,
+				DX:      tile.DX,
+				DY:      tile.DY,
+				Scale:   tile.Scale,
+			})
+		}
 	}
 	t.requestAnimationFrame()
 }

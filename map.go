@@ -33,13 +33,13 @@ func (e MapEvents) wrapEmpty() MapEvents {
 }
 
 type TileRenderer interface {
-	RenderTiles(tiles map[string]*Tile)
+	RenderTiles(zoom int, tiles map[string]*Tile)
 	Viewport() (width, height float64)
 }
 
 func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	doc := js.Global().Get("document")
-	body := doc.Get("body")
+	// body := doc.Get("body")
 
 	viewport := doc.Call("createElement", "canvas")
 
@@ -54,8 +54,8 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 
 	divEl.Call("appendChild", viewport)
 
-	body.Call("addEventListener", "gesturechange", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
-	body.Call("addEventListener", "gesturestart", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
+	// body.Call("addEventListener", "gesturechange", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
+	// body.Call("addEventListener", "gesturestart", js.NewEventCallback(js.PreventDefault, func(event js.Value) {}), false)
 
 	m := &Map{
 		events:   events.wrapEmpty(),
@@ -73,7 +73,7 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 	window := js.Global().Get("window")
 	window.Call("addEventListener", "resize", js.NewEventCallback(0, func(event js.Value) {
 		onResize(event)
-		m.Update()
+		m.Update(ZoomingZero)
 	}))
 
 	m.tlat = m.Lat()
@@ -162,10 +162,16 @@ func (m *Map) SetPosition(zoom, lat, lon float64) {
 	if zoom == m.zoom && lat == m.lat && lon == m.lon {
 		return
 	}
+	zooming := ZoomingZero
+	if zoom > m.zoom {
+		zooming = ZoomingIn
+	} else if zoom < m.zoom {
+		zooming = ZoomingOut
+	}
 	m.setZoom(zoom)
 	m.setLat(lat)
 	m.setLon(lon)
-	m.Update()
+	m.Update(zooming)
 }
 
 func (m *Map) AddTileRenderers(tr ...TileRenderer) {
@@ -181,31 +187,34 @@ func (m *Map) anim() {
 		return
 	}
 
+	var newLat float64
+	var newLon float64
+
 	if m.tlat > m.Lat() {
-		m.setLat(m.Lat() + m.step)
-		if m.Lat() > m.tlat {
-			m.setLat(m.tlat)
+		newLat = m.Lat() + m.step
+		if newLat > m.tlat {
+			newLat = m.tlat
 		}
 	} else {
-		m.setLat(m.Lat() - m.step)
-		if m.Lat() < m.tlat {
-			m.setLat(m.tlat)
+		newLat = m.Lat() - m.step
+		if newLat < m.tlat {
+			newLat = m.tlat
 		}
 	}
 
 	if m.tlon > m.Lon() {
-		m.setLon(m.Lon() + m.step)
-		if m.Lon() > m.tlon {
-			m.setLon(m.tlon)
+		newLon = m.Lon() + m.step
+		if newLon > m.tlon {
+			newLon = m.tlon
 		}
 	} else {
-		m.setLon(m.Lon() - m.step)
-		if m.Lon() < m.tlon {
-			m.setLon(m.tlon)
+		newLon = m.Lon() - m.step
+		if newLon < m.tlon {
+			newLon = m.tlon
 		}
 	}
 
-	m.Update()
+	m.SetPosition(m.zoom, newLat, newLon)
 	time.Sleep(100 * time.Millisecond)
 	go m.anim()
 }
@@ -287,8 +296,8 @@ func (m *Map) onMouseMove(event js.Value) {
 }
 
 // TilesFromCenter gets the tiles required from the centre point
-func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
-	cx, cy := TileNum(int(m.zoom), m.lat, m.lon)
+func (m *Map) TilesFromCenter(zoom float64, canvasWidth, canvasHeight int) map[string]*Tile {
+	cx, cy := TileNum(int(zoom), m.lat, m.lon)
 
 	tx := int(cx)
 	ty := int(cy)
@@ -296,8 +305,8 @@ func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
 	px := float64(tx) - cx
 	py := float64(ty) - cy
 
-	iz := int(m.zoom)
-	scale := 1 + (0.5 + (m.zoom - float64(iz)))
+	iz := int(zoom)
+	scale := 1 + (0.5 + (zoom - float64(iz)))
 	dx := -int(px * TileWidth * scale)
 	dy := -int(py * TileHeight * scale)
 
@@ -313,10 +322,11 @@ func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
 	for cx := startX; cx < endX; cx++ {
 		for cy := startY; cy < endY; cy++ {
 			t := &Tile{
-				URL:   m.urlEr.URL(int(m.zoom), cx+tx, cy+ty),
+				URL:   m.urlEr.URL(int(zoom), cx+tx, cy+ty),
 				DX:    dx - (cx * int(TileWidth*scale)),
 				DY:    dy - (cy * int(TileHeight*scale)),
 				Scale: scale,
+				Zoom:  int(zoom),
 			}
 			tiles[t.URL.String()] = t
 		}
@@ -325,10 +335,36 @@ func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
 	return tiles
 }
 
-func (m *Map) Update() {
+type Zooming byte
+
+const (
+	ZoomingZero Zooming = iota
+	ZoomingIn
+	ZoomingOut
+)
+
+func (m *Map) Update(zooming Zooming) {
+	zoomStart := m.zoom
+	zoomEnd := m.zoom
+
+	switch zooming {
+	case ZoomingIn:
+		zoomStart--
+	case ZoomingOut:
+		zoomEnd++
+	}
+
 	for _, r := range m.tileRenderers {
+		tiles := map[string]*Tile{}
 		width, height := r.Viewport()
-		tiles := m.TilesFromCenter(int(width), int(height))
-		r.RenderTiles(tiles)
+
+		for zoom := zoomStart; zoom <= zoomEnd; zoom++ {
+			ztiles := m.TilesFromCenter(zoom, int(width), int(height))
+
+			for k, v := range ztiles {
+				tiles[k] = v
+			}
+		}
+		r.RenderTiles(int(m.zoom), tiles)
 	}
 }
