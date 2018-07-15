@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/url"
+	"strconv"
 
 	"syscall/js"
 
@@ -11,31 +12,75 @@ import (
 
 func main() {
 	doc := js.Global().Get("document")
-	canvasEl := doc.Call("getElementById", "mycanvas")
-	body := doc.Get("body")
-	width := body.Get("clientWidth").Int()
-	height := body.Get("clientHeight").Int()
-	canvasEl.Set("width", width)
-	canvasEl.Set("height", height)
+	divEl := doc.Call("getElementById", "mapid")
+
+	zoomEl := doc.Call("getElementById", "zoom")
+	latEl := doc.Call("getElementById", "latitude")
+	lonEl := doc.Call("getElementById", "longitude")
+	buttonEl := doc.Call("getElementById", "updatePosition")
 
 	baseURL, err := url.Parse("https://a.tile.openstreetmap.org")
 	if err != nil {
 		panic(err)
 	}
 
-	tr, err := pmwgl.NewTileRenderer("mycanvas")
+	events := pichiwmap.MapEvents{
+		OnLatChanged: func(lat float64) {
+			latEl.Set("value", strconv.FormatFloat(lat, 'f', 6, 64))
+		},
+		OnLonChanged: func(lon float64) {
+			lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
+		},
+		OnZoomChanged: func(zoom int) {
+			zoomEl.Set("value", strconv.Itoa(zoom))
+		},
+	}
+
+	m, err := pichiwmap.New(baseURL, divEl, events)
 	if err != nil {
 		panic(err)
 	}
 
-	m, err := pichiwmap.New(baseURL, tr)
+	events.OnLatChanged(m.Lat())
+	events.OnLonChanged(m.Lon())
+	events.OnZoomChanged(m.Zoom())
+
+	tr, err := pmwgl.NewTileRenderer(m.Canvas())
 	if err != nil {
 		panic(err)
 	}
+
+	m.AddTileRenderers(tr)
+
+	buttonEl.Call("addEventListener", "click", js.NewEventCallback(js.PreventDefault, onUpdateClick(m, zoomEl, latEl, lonEl)), false)
 
 	c := make(chan struct{}, 0)
 
 	m.Update()
 
 	<-c
+}
+
+func onUpdateClick(m *pichiwmap.Map, zoomEl, latEl, lonEl js.Value) func(event js.Value) {
+	return func(event js.Value) {
+
+		zoom, err := strconv.Atoi(zoomEl.Get("value").String())
+		if err != nil {
+			js.Global().Call("alert", "Invalid zoom (must be between 1 and 18)")
+			return
+		}
+
+		lat, err := strconv.ParseFloat(latEl.Get("value").String(), 64)
+		if err != nil {
+			js.Global().Call("alert", "Invalid m.Lon Value")
+			return
+		}
+		lon, err := strconv.ParseFloat(lonEl.Get("value").String(), 64)
+		if err != nil {
+			js.Global().Call("alert", "Invalid m.Lat Value")
+			return
+		}
+
+		m.SetPosition(zoom, lat, lon)
+	}
 }

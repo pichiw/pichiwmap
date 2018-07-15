@@ -10,13 +10,13 @@ import (
 
 var ErrNoWebGL = errors.New("no webgl found")
 
-func NewTileRenderer(canvasID string) (*TileRenderer, error) {
+func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
 	cache, err := lru.New(1000)
 	if err != nil {
 		return nil, err
 	}
 
-	gl, err := NewWebGL(canvasID)
+	gl, err := NewWebGL(canvasEl)
 	if err != nil {
 		return nil, err
 	}

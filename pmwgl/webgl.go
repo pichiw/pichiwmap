@@ -5,10 +5,7 @@ import (
 	"syscall/js"
 )
 
-func NewWebGL(canvasid string) (*WebGL, error) {
-	doc := js.Global().Get("document")
-	canvasEl := doc.Call("getElementById", "mycanvas")
-
+func NewWebGL(canvasEl js.Value) (*WebGL, error) {
 	gl := canvasEl.Call("getContext", "webgl")
 	if gl == js.Undefined() {
 		gl = canvasEl.Call("getContext", "experimental-webgl")
