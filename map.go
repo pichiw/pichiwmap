@@ -43,8 +43,8 @@ func New(baseURL *url.URL, divEl js.Value, events MapEvents) (*Map, error) {
 
 	viewport := doc.Call("createElement", "canvas")
 
-	width := body.Get("clientWidth").Int()
-	height := body.Get("clientHeight").Int()
+	width := divEl.Get("offsetWidth").Int()
+	height := divEl.Get("offsetHeight").Int()
 
 	viewport.Set("width", width)
 	viewport.Set("height", height)
