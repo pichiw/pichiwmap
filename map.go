@@ -10,7 +10,7 @@ import (
 type (
 	OnLatChanged  func(lat float64)
 	OnLonChanged  func(lon float64)
-	OnZoomChanged func(zoom int)
+	OnZoomChanged func(zoom float64)
 )
 
 type MapEvents struct {
@@ -27,7 +27,7 @@ func (e MapEvents) wrapEmpty() MapEvents {
 		e.OnLonChanged = func(float64) {}
 	}
 	if e.OnZoomChanged == nil {
-		e.OnZoomChanged = func(int) {}
+		e.OnZoomChanged = func(float64) {}
 	}
 	return e
 }
@@ -62,9 +62,12 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 		lat:      49.8951,
 		lon:      -97.1384,
 		zoom:     15,
+		zoomStep: 0.1,
 		step:     0.001,
 		urlEr:    urlEr,
 		viewport: viewport,
+		maxZoom:  18,
+		minZoom:  0,
 	}
 
 	window := js.Global().Get("window")
@@ -85,6 +88,7 @@ func New(urlEr URLer, divEl js.Value, events MapEvents) (*Map, error) {
 
 	doc.Call("addEventListener", "keyup", js.NewEventCallback(js.PreventDefault, m.onKeyUp), false)
 	doc.Call("addEventListener", "keydown", js.NewEventCallback(js.PreventDefault, m.onKeyDown), false)
+	doc.Call("addEventListener", "wheel", js.NewEventCallback(js.PreventDefault, m.wheel), false)
 
 	return m, nil
 }
@@ -98,7 +102,8 @@ type Map struct {
 	viewport js.Value
 
 	urlEr         URLer
-	zoom          int
+	zoom          float64
+	zoomStep      float64
 	lat           float64
 	lon           float64
 	tlat          float64
@@ -109,13 +114,16 @@ type Map struct {
 	mouseStartLat float64
 	mouseStartLon float64
 	mouseDown     bool
+	arrowDown     bool
+	maxZoom       float64
+	minZoom       float64
 }
 
-func (m *Map) Zoom() int {
+func (m *Map) Zoom() float64 {
 	return m.zoom
 }
 
-func (m *Map) setZoom(zoom int) {
+func (m *Map) setZoom(zoom float64) {
 	if m.zoom == zoom {
 		return
 	}
@@ -147,7 +155,10 @@ func (m *Map) setLon(lon float64) {
 	m.events.OnLonChanged(lon)
 }
 
-func (m *Map) SetPosition(zoom int, lat, lon float64) {
+func (m *Map) SetPosition(zoom, lat, lon float64) {
+	if zoom < m.minZoom || zoom > m.maxZoom {
+		return
+	}
 	if zoom == m.zoom && lat == m.lat && lon == m.lon {
 		return
 	}
@@ -194,9 +205,20 @@ func (m *Map) anim() {
 		}
 	}
 
-	time.Sleep(100 * time.Millisecond)
 	m.Update()
+	time.Sleep(100 * time.Millisecond)
 	go m.anim()
+}
+
+func (m *Map) wheel(event js.Value) {
+	var delta float64
+	if event.Get("deltaY").Int() < 0 {
+		delta = m.zoomStep
+	} else {
+		delta = -m.zoomStep
+	}
+
+	m.SetPosition(m.zoom+delta, m.lat, m.lon)
 }
 
 func (m *Map) onKeyDown(event js.Value) {
@@ -208,6 +230,10 @@ func (m *Map) onKeyDown(event js.Value) {
 		return
 	}
 
+	if !m.arrowDown {
+		m.tlat = m.lat
+		m.tlon = m.lon
+	}
 	switch event.Get("keyCode").Int() {
 	case 38: // up
 		m.tlat += 0.005
@@ -221,12 +247,13 @@ func (m *Map) onKeyDown(event js.Value) {
 		return
 	}
 
+	m.arrowDown = true
+
 	go m.anim()
 }
 
 func (m *Map) onKeyUp(event js.Value) {
-	m.tlat = m.Lat()
-	m.tlon = m.Lon()
+	m.arrowDown = false
 }
 
 func (m *Map) onMouseDown(event js.Value) {
@@ -255,13 +282,13 @@ func (m *Map) onMouseMove(event js.Value) {
 	dx := m.mouseStartX - event.Get("pageX").Int()
 	dy := m.mouseStartY - event.Get("pageY").Int()
 
-	lat, lon := Move(m.Zoom(), m.mouseStartLat, m.mouseStartLon, dx, dy)
+	lat, lon := Move(int(m.Zoom()), m.mouseStartLat, m.mouseStartLon, dx, dy)
 	m.SetPosition(m.Zoom(), lat, lon)
 }
 
 // TilesFromCenter gets the tiles required from the centre point
 func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
-	cx, cy := TileNum(m.zoom, m.lat, m.lon)
+	cx, cy := TileNum(int(m.zoom), m.lat, m.lon)
 
 	tx := int(cx)
 	ty := int(cy)
@@ -269,13 +296,15 @@ func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
 	px := float64(tx) - cx
 	py := float64(ty) - cy
 
-	dx := -int(px * tileWidth)
-	dy := -int(py * tileHeight)
+	iz := int(m.zoom)
+	scale := 1 + (0.5 + (m.zoom - float64(iz)))
+	dx := -int(px * TileWidth * scale)
+	dy := -int(py * TileHeight * scale)
 
 	tiles := map[string]*Tile{}
 
-	requiredWidth := int(math.Ceil(float64(canvasWidth)/tileWidth)) + 1
-	requiredHeight := int(math.Ceil(float64(canvasHeight)/tileHeight)) + 1
+	requiredWidth := int(math.Ceil(float64(canvasWidth)/(TileWidth*scale))) + 2
+	requiredHeight := int(math.Ceil(float64(canvasHeight)/(TileHeight*scale))) + 2
 
 	startX := -(requiredWidth / 2)
 	startY := -(requiredHeight / 2)
@@ -284,9 +313,10 @@ func (m *Map) TilesFromCenter(canvasWidth, canvasHeight int) map[string]*Tile {
 	for cx := startX; cx < endX; cx++ {
 		for cy := startY; cy < endY; cy++ {
 			t := &Tile{
-				URL: m.urlEr.URL(m.zoom, cx+tx, cy+ty),
-				DX:  dx - (cx * tileWidth),
-				DY:  dy - (cy * tileHeight),
+				URL:   m.urlEr.URL(int(m.zoom), cx+tx, cy+ty),
+				DX:    dx - (cx * int(TileWidth*scale)),
+				DY:    dy - (cy * int(TileHeight*scale)),
+				Scale: scale,
 			}
 			tiles[t.URL.String()] = t
 		}

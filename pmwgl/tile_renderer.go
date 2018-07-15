@@ -2,6 +2,7 @@ package pmwgl
 
 import (
 	"errors"
+	"sync"
 	"syscall/js"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -108,6 +109,7 @@ func (t *TileRenderer) updateGl() {
 			td.Texture,
 			centreX-float64(td.DX),
 			centreY-float64(td.DY),
+			td.Scale,
 		)
 	}
 
@@ -116,42 +118,45 @@ func (t *TileRenderer) updateGl() {
 func (t *TileRenderer) RenderTiles(tiles map[string]*pichiwmap.Tile) {
 	for _, td := range t.toDraw {
 		if _, ok := tiles[td.Texture.URL]; !ok {
-			td.Texture.Cancel()
+			if td.Texture.Cancel() {
+				t.cache.Remove(td.Texture.URL)
+			}
 		}
 	}
+
 	t.toDraw = nil
 
 	for _, tile := range tiles {
-		currentTile := tile
-		u := currentTile.URL.String()
+		u := tile.URL.String()
+
+		var txi *textureInfo
 		v, ok := t.cache.Get(u)
 		if ok {
-			txi := v.(*textureInfo)
-			t.toDraw = append(t.toDraw, &drawInfo{
-				Texture: txi,
-				DX:      currentTile.DX,
-				DY:      currentTile.DY,
-			})
+			txi = v.(*textureInfo)
 		} else {
-			txi := t.loadImage(currentTile.URL.String(), func(txi *textureInfo) {
-				if txi.Cancelled {
-					t.cache.Remove(u)
-				}
-				txi.Loaded = true
-				t.toDraw = append(t.toDraw, &drawInfo{
-					Texture: txi,
-					DX:      currentTile.DX,
-					DY:      currentTile.DY,
-				})
-				js.Global().Call("requestAnimationFrame", t.renderFrame)
-			})
+			txi = t.loadImage(tile.URL.String(), t.imageLoadCallback)
 			t.cache.Add(u, txi)
 		}
+
+		t.toDraw = append(t.toDraw, &drawInfo{
+			Texture: txi,
+			DX:      tile.DX,
+			DY:      tile.DY,
+			Scale:   tile.Scale,
+		})
 	}
+	t.requestAnimationFrame()
+}
+
+func (t *TileRenderer) imageLoadCallback(txi *textureInfo) {
+	t.requestAnimationFrame()
+}
+
+func (t *TileRenderer) requestAnimationFrame() {
 	js.Global().Call("requestAnimationFrame", t.renderFrame)
 }
 
-func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY float64) {
+func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY, scale float64) {
 	cwidth, cheight := t.Viewport()
 
 	t.gl.BindTexture(t.gl.TEXTURE_2D, tex.Texture)
@@ -165,7 +170,7 @@ func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY float64) {
 
 	var matrix = t.gl.Orthographic(0, cwidth, cheight, 0, -1, 1)
 	matrix = t.gl.Translate(matrix, dstX, dstY, 0)
-	matrix = t.gl.Scale(matrix, float64(tex.Width), float64(tex.Height), 1)
+	matrix = t.gl.Scale(matrix, float64(tex.Width)*scale, float64(tex.Height)*scale, 1)
 
 	t.gl.UniformMatrix4fv(t.matrix, false, matrix)
 	t.gl.Uniform1i(t.texture, 0)
@@ -173,45 +178,74 @@ func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY float64) {
 }
 
 type textureInfo struct {
-	URL       string
-	Width     int // we don't know the size until it loads
-	Height    int
-	Texture   js.Value
-	Image     js.Value
-	Loaded    bool
-	Cancelled bool
-	Callback  js.Callback
+	m           sync.Mutex
+	URL         string
+	Width       int // we don't know the size until it loads
+	Height      int
+	Texture     js.Value
+	Image       js.Value
+	Loaded      bool
+	Cancelled   bool
+	Callback    js.Callback
+	releaseOnce sync.Once
 }
 
-func (t *textureInfo) Cancel() {
-	if t.Loaded {
-		return // Don't cancel if it's already loaded!
+func (t *textureInfo) Release() {
+	t.releaseOnce.Do(func() {
+		//t.Callback.Release()
+	})
+}
+func (t *textureInfo) Cancel() bool {
+	t.m.Lock()
+	defer t.m.Unlock()
+
+	if t.Loaded || t.Cancelled {
+		return false // Don't cancel if it's already loaded!
 	}
-	t.Image.Set("src", "")
+	t.Release()
 	t.Cancelled = true
-	t.Callback.Release()
+	t.Image.Set("src", "")
+	return true
+}
+
+var blankTexture js.TypedArray
+
+func init() {
+	bt := make([]uint8, pichiwmap.TileWidth*pichiwmap.TileHeight*4)
+
+	for i := 0; i < len(bt); i += 4 {
+		bt[i] = 0
+		bt[i+1] = 0
+		bt[i+2] = 0
+		bt[i+3] = 30
+	}
+
+	blankTexture = js.TypedArrayOf(bt)
 }
 
 func (t *TileRenderer) loadImage(url string, onLoad func(txi *textureInfo)) *textureInfo {
 	tex := t.gl.CreateTexture()
 	t.gl.BindTexture(t.gl.TEXTURE_2D, tex)
-	t.gl.TexImage2DColor(t.gl.TEXTURE_2D, 0, t.gl.RGBA, 1, 1, 0, t.gl.RGBA, t.gl.UNSIGNED_BYTE, js.TypedArrayOf([]uint8{0, 0, 255, 255}))
+	t.gl.TexImage2DColor(t.gl.TEXTURE_2D, 0, t.gl.RGBA, pichiwmap.TileWidth, pichiwmap.TileHeight, 0, t.gl.RGBA, t.gl.UNSIGNED_BYTE, blankTexture)
 	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_WRAP_S, t.gl.CLAMP_TO_EDGE)
 	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_WRAP_T, t.gl.CLAMP_TO_EDGE)
 	t.gl.TexParameteri(t.gl.TEXTURE_2D, t.gl.TEXTURE_MIN_FILTER, t.gl.LINEAR)
 
 	txi := &textureInfo{
 		URL:     url,
-		Width:   1,
-		Height:  1,
+		Width:   pichiwmap.TileWidth,
+		Height:  pichiwmap.TileHeight,
 		Texture: tex,
 		Image:   js.Global().Get("Image").New(),
 	}
 
 	txi.Callback = js.NewEventCallback(0, func(event js.Value) {
-		if txi.Cancelled && !txi.Loaded {
-			return
-		}
+		txi.m.Lock()
+		defer txi.m.Unlock()
+
+		txi.Release()
+		txi.Loaded = true
+
 		txi.Width = txi.Image.Get("width").Int()
 		txi.Height = txi.Image.Get("height").Int()
 
@@ -230,6 +264,7 @@ type drawInfo struct {
 	Texture *textureInfo
 	DX      int
 	DY      int
+	Scale   float64
 }
 
 const vertexShaderSource = `

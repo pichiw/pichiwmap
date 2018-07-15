@@ -21,14 +21,15 @@ func init() {
 }
 
 const (
-	tileWidth  = 256
-	tileHeight = 256
+	TileWidth  = 256
+	TileHeight = 256
 )
 
 type Tile struct {
-	DX  int
-	DY  int
-	URL *url.URL
+	DX    int
+	DY    int
+	Scale float64
+	URL   *url.URL
 }
 
 type URLer interface {
@@ -47,8 +48,8 @@ func TileNum(zoom int, lat, lon float64) (x, y float64) {
 // Move moves the lat and long by the delta pixels pdx and pdy
 func Move(zoom int, lat, lon float64, pdx int, pdy int) (nlat, nlon float64) {
 	xf, yf := TileNum(zoom, lat, lon)
-	dx := float64(pdx) / tileWidth
-	dy := float64(pdy) / tileHeight
+	dx := float64(pdx) / TileWidth
+	dy := float64(pdy) / TileHeight
 
 	return latlonFromXY(zoom, xf+dx, yf+dy)
 }

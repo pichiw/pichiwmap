@@ -36,8 +36,8 @@ func main() {
 		OnLonChanged: func(lon float64) {
 			lonEl.Set("value", strconv.FormatFloat(lon, 'f', 6, 64))
 		},
-		OnZoomChanged: func(zoom int) {
-			zoomEl.Set("value", strconv.Itoa(zoom))
+		OnZoomChanged: func(zoom float64) {
+			zoomEl.Set("value", strconv.FormatFloat(zoom, 'f', 6, 64))
 		},
 	}
 
@@ -69,7 +69,7 @@ func main() {
 func onUpdateClick(m *pichiwmap.Map, zoomEl, latEl, lonEl js.Value) func(event js.Value) {
 	return func(event js.Value) {
 
-		zoom, err := strconv.Atoi(zoomEl.Get("value").String())
+		zoom, err := strconv.ParseFloat(zoomEl.Get("value").String(), 64)
 		if err != nil {
 			js.Global().Call("alert", "Invalid zoom (must be between 1 and 18)")
 			return
