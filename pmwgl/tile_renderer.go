@@ -107,9 +107,9 @@ func (t *TileRenderer) updateGl() {
 	for _, td := range t.toDraw {
 		t.drawImage(
 			td.Texture,
-			centreX-float64(td.DX),
-			centreY-float64(td.DY),
-			td.Scale,
+			float32(centreX)-float32(td.DX),
+			float32(centreY)-float32(td.DY),
+			float32(td.Scale),
 		)
 	}
 }
@@ -159,7 +159,7 @@ func (t *TileRenderer) requestAnimationFrame() {
 	js.Global().Call("requestAnimationFrame", t.renderFrame)
 }
 
-func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY, scale float64) {
+func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY, scale float32) {
 	cwidth, cheight := t.Viewport()
 
 	t.gl.BindTexture(t.gl.Texture2D, tex.Texture)
@@ -171,9 +171,9 @@ func (t *TileRenderer) drawImage(tex *textureInfo, dstX, dstY, scale float64) {
 	t.gl.EnableVertexAttribArray(t.texcoord)
 	t.gl.VertexAttribPointer(t.texcoord, 2, t.gl.Float, false, 0, 0)
 
-	var matrix = t.gl.Orthographic(0, cwidth, cheight, 0, -1, 1)
-	matrix = t.gl.Translate(matrix, dstX, dstY, 0)
-	matrix = t.gl.Scale(matrix, float64(tex.Width)*scale, float64(tex.Height)*scale, 1)
+	matrix := Orthographic(0, float32(cwidth), float32(cheight), 0, -1, 1)
+	matrix = matrix.Translate(dstX, dstY, 0)
+	matrix = matrix.Scale(float32(tex.Width)*scale, float32(tex.Height)*scale, 1)
 
 	t.gl.UniformMatrix4fv(t.matrix, false, matrix)
 	t.gl.Uniform1i(t.texture, 0)

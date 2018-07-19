@@ -21,7 +21,6 @@ func NewWebGL(canvasEl js.Value) (*WebGL, error) {
 
 	return &WebGL{
 		gl:               gl,
-		m4:               js.Global().Get("m4"),
 		CompileStatus:    gl.Get("COMPILE_STATUS"),
 		LinkStatus:       gl.Get("LINK_STATUS"),
 		VertexShader:     gl.Get("VERTEX_SHADER"),
@@ -45,7 +44,6 @@ func NewWebGL(canvasEl js.Value) (*WebGL, error) {
 // WebGL wrapper
 type WebGL struct {
 	gl js.Value
-	m4 js.Value
 
 	CompileStatus    js.Value
 	LinkStatus       js.Value
@@ -216,25 +214,10 @@ func (w *WebGL) VertexAttribPointer(index js.Value, size int, typ js.Value, norm
 	w.gl.Call("vertexAttribPointer", index, size, typ, normalized, stride, offset)
 }
 
-// Orthographic https://webglfundamentals.org/webgl/lessons/webgl-3d-orthographic.html
-func (w *WebGL) Orthographic(left, right, bottom, top, near, far float64) js.Value {
-	return w.m4.Call("orthographic", left, right, bottom, top, near, far)
-}
-
-// Translate https://webglfundamentals.org/webgl/lessons/webgl-3d-orthographic.html
-func (w *WebGL) Translate(matrix js.Value, dstX, dstY, dstZ float64) js.Value {
-	return w.m4.Call("translate", matrix, dstX, dstY, dstZ)
-}
-
-// Scale https://webglfundamentals.org/webgl/lessons/webgl-3d-orthographic.html
-func (w *WebGL) Scale(matrix js.Value, width, height, depth float64) js.Value {
-	return w.m4.Call("scale", matrix, width, height, depth)
-}
-
 // UniformMatrix4fv https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/uniformMatrix
 // WebGLRenderingContext.uniformMatrix4fv(location, transpose, value);
-func (w *WebGL) UniformMatrix4fv(location js.Value, transpose bool, value js.Value) {
-	w.gl.Call("uniformMatrix4fv", location, transpose, value)
+func (w *WebGL) UniformMatrix4fv(location js.Value, transpose bool, value Matrix4) {
+	w.gl.Call("uniformMatrix4fv", location, transpose, js.TypedArrayOf(value[:]))
 }
 
 // Uniform1i https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/uniform
