@@ -19,6 +19,8 @@ Right this package is very experimental and most rendering logic is proof-of-con
 ## TODO
 
 - Handle edge of the decidedly non-flat Earth.
+- Implement concurrency protection (single thread != no race conditions :))
+- Spike on vector tiles instead of (or in addition to) raster tiles. 
 - Refinement of cache/loading (on-going)
 - Markers, polygons, etc. 
 - JavaScript hooks to allow non-wasm/go programmers to utilize the map
