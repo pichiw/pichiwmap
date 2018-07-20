@@ -21,23 +21,28 @@ func NewWebGL(canvasEl js.Value) (*WebGL, error) {
 
 	return &WebGL{
 		gl:               gl,
-		CompileStatus:    gl.Get("COMPILE_STATUS"),
-		LinkStatus:       gl.Get("LINK_STATUS"),
-		VertexShader:     gl.Get("VERTEX_SHADER"),
-		FragmentShader:   gl.Get("FRAGMENT_SHADER"),
-		ArrayBuffer:      gl.Get("ARRAY_BUFFER"),
-		StaticDraw:       gl.Get("STATIC_DRAW"),
-		ColorBufferBit:   gl.Get("COLOR_BUFFER_BIT"),
-		Texture2D:        gl.Get("TEXTURE_2D"),
-		Float:            gl.Get("FLOAT"),
-		Triangles:        gl.Get("TRIANGLES"),
-		RGBA:             gl.Get("RGBA"),
-		TextureWrapS:     gl.Get("TEXTURE_WRAP_S"),
-		TextureWrapT:     gl.Get("TEXTURE_WRAP_T"),
-		TextureMinFilter: gl.Get("TEXTURE_MIN_FILTER"),
-		ClampToEdge:      gl.Get("CLAMP_TO_EDGE"),
-		Linear:           gl.Get("LINEAR"),
-		UnsignedByte:     gl.Get("UNSIGNED_BYTE"),
+		CullFace:         gl.Get("CULL_FACE").Int(),
+		DepthTest:        gl.Get("DEPTH_TEST").Int(),
+		DepthBufferBit:   gl.Get("DEPTH_BUFFER_BIT").Int(),
+		CompileStatus:    gl.Get("COMPILE_STATUS").Int(),
+		LinkStatus:       gl.Get("LINK_STATUS").Int(),
+		VertexShader:     gl.Get("VERTEX_SHADER").Int(),
+		FragmentShader:   gl.Get("FRAGMENT_SHADER").Int(),
+		ArrayBuffer:      gl.Get("ARRAY_BUFFER").Int(),
+		StaticDraw:       gl.Get("STATIC_DRAW").Int(),
+		ColorBufferBit:   gl.Get("COLOR_BUFFER_BIT").Int(),
+		Texture2D:        gl.Get("TEXTURE_2D").Int(),
+		Float:            gl.Get("FLOAT").Int(),
+		Triangles:        gl.Get("TRIANGLES").Int(),
+		TriangleFan:      gl.Get("TRIANGLE_FAN").Int(),
+		LineStrip:        gl.Get("LINE_STRIP").Int(),
+		RGBA:             gl.Get("RGBA").Int(),
+		TextureWrapS:     gl.Get("TEXTURE_WRAP_S").Int(),
+		TextureWrapT:     gl.Get("TEXTURE_WRAP_T").Int(),
+		TextureMinFilter: gl.Get("TEXTURE_MIN_FILTER").Int(),
+		ClampToEdge:      gl.Get("CLAMP_TO_EDGE").Int(),
+		Linear:           gl.Get("LINEAR").Int(),
+		UnsignedByte:     gl.Get("UNSIGNED_BYTE").Int(),
 	}, nil
 }
 
@@ -45,28 +50,33 @@ func NewWebGL(canvasEl js.Value) (*WebGL, error) {
 type WebGL struct {
 	gl js.Value
 
-	CompileStatus    js.Value
-	LinkStatus       js.Value
-	VertexShader     js.Value
-	FragmentShader   js.Value
-	ArrayBuffer      js.Value
-	StaticDraw       js.Value
-	ColorBufferBit   js.Value
-	Texture2D        js.Value
-	Float            js.Value
-	Triangles        js.Value
-	RGBA             js.Value
-	TextureWrapS     js.Value
-	TextureWrapT     js.Value
-	TextureMinFilter js.Value
-	ClampToEdge      js.Value
-	UnsignedByte     js.Value
-	Linear           js.Value
+	CullFace         int
+	DepthTest        int
+	DepthBufferBit   int
+	CompileStatus    int
+	LinkStatus       int
+	VertexShader     int
+	FragmentShader   int
+	ArrayBuffer      int
+	StaticDraw       int
+	ColorBufferBit   int
+	Texture2D        int
+	Float            int
+	Triangles        int
+	TriangleFan      int
+	LineStrip        int
+	RGBA             int
+	TextureWrapS     int
+	TextureWrapT     int
+	TextureMinFilter int
+	ClampToEdge      int
+	UnsignedByte     int
+	Linear           int
 }
 
 // CreateShader https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/createShader
 // WebGLShader gl.createShader(type);
-func (w *WebGL) CreateShader(shaderType js.Value) js.Value {
+func (w *WebGL) CreateShader(shaderType int) js.Value {
 	return w.gl.Call("createShader", shaderType)
 }
 
@@ -84,12 +94,12 @@ func (w *WebGL) CompileShader(shader js.Value) {
 
 // GetShaderParameter https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/getShaderParameter
 // any gl.getShaderParameter(shader, pname);
-func (w *WebGL) GetShaderParameter(shader, param js.Value) js.Value {
+func (w *WebGL) GetShaderParameter(shader js.Value, param int) js.Value {
 	return w.gl.Call("getShaderParameter", shader, param)
 }
 
 // CreateCompiledShader creates and compilesa shader from a source string
-func (w *WebGL) CreateCompiledShader(shaderType js.Value, shaderSrc string) (js.Value, error) {
+func (w *WebGL) CreateCompiledShader(shaderType int, shaderSrc string) (js.Value, error) {
 	var shader = w.CreateShader(shaderType)
 	w.ShaderSource(shader, shaderSrc)
 	w.CompileShader(shader)
@@ -120,7 +130,7 @@ func (w *WebGL) LinkProgram(program js.Value) {
 
 // GetProgramParameter https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/getProgramParameter
 // any gl.getProgramParameter(program, pname);
-func (w *WebGL) GetProgramParameter(program, param js.Value) js.Value {
+func (w *WebGL) GetProgramParameter(program js.Value, param int) js.Value {
 	return w.gl.Call("getProgramParameter", program, param)
 }
 
@@ -156,13 +166,13 @@ func (w *WebGL) CreateBuffer() js.Value {
 
 // BindBuffer https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/bindBuffer
 // void gl.bindBuffer(target, buffer);
-func (w *WebGL) BindBuffer(t, buffer js.Value) {
+func (w *WebGL) BindBuffer(t int, buffer js.Value) {
 	w.gl.Call("bindBuffer", t, buffer)
 }
 
 // BufferData https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/bufferData
 // void gl.bufferData(target, ArrayBuffer? srcData, usage);
-func (w *WebGL) BufferData(t js.Value, data js.TypedArray, drawType js.Value) {
+func (w *WebGL) BufferData(t int, data js.TypedArray, drawType int) {
 	w.gl.Call("bufferData", t, data, drawType)
 }
 
@@ -180,7 +190,7 @@ func (w *WebGL) ClearColor(r, g, b, a float64) {
 
 // Clear https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/clear
 // void gl.clear(mask);
-func (w *WebGL) Clear(bufferBit js.Value) {
+func (w *WebGL) Clear(bufferBit int) {
 	w.gl.Call("clear", bufferBit)
 }
 
@@ -192,7 +202,7 @@ func (w *WebGL) Canvas() js.Value {
 
 // BindTexture https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/bindTexture
 // void gl.bindTexture(target, texture);
-func (w *WebGL) BindTexture(typ, texture js.Value) {
+func (w *WebGL) BindTexture(typ int, texture js.Value) {
 	w.gl.Call("bindTexture", typ, texture)
 }
 
@@ -200,6 +210,12 @@ func (w *WebGL) BindTexture(typ, texture js.Value) {
 // void gl.useProgram(program);
 func (w *WebGL) UseProgram(program js.Value) {
 	w.gl.Call("useProgram", program)
+}
+
+// Enable https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/enable
+// void gl.enable(cap);
+func (w *WebGL) Enable(capability int) {
+	w.gl.Call("enable", capability)
 }
 
 // EnableVertexAttribArray https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/enableVertexAttribArray
@@ -210,7 +226,7 @@ func (w *WebGL) EnableVertexAttribArray(position js.Value) {
 
 // VertexAttribPointer https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/vertexAttribPointer
 // void gl.vertexAttribPointer(index, size, type, normalized, stride, offset);
-func (w *WebGL) VertexAttribPointer(index js.Value, size int, typ js.Value, normalized bool, stride, offset int) {
+func (w *WebGL) VertexAttribPointer(index js.Value, size int, typ int, normalized bool, stride, offset int) {
 	w.gl.Call("vertexAttribPointer", index, size, typ, normalized, stride, offset)
 }
 
@@ -228,7 +244,7 @@ func (w *WebGL) Uniform1i(location js.Value, v0 float64) {
 
 // DrawArrays https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/drawArrays
 // void gl.drawArrays(mode, first, count);
-func (w *WebGL) DrawArrays(mode js.Value, first, count int) {
+func (w *WebGL) DrawArrays(mode, first, count int) {
 	w.gl.Call("drawArrays", mode, first, count)
 }
 
@@ -240,19 +256,25 @@ func (w *WebGL) CreateTexture() js.Value {
 
 // TexImage2DColor https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texImage2D
 // void gl.texImage2D(target, level, internalformat, width, height, border, format, type, ArrayBufferView? pixels);
-func (w *WebGL) TexImage2DColor(target js.Value, level float64, internalformat js.Value, width, height, border float64, format js.Value, typ js.Value, source js.TypedArray) {
+func (w *WebGL) TexImage2DColor(target int, level float64, internalformat int, width, height, border float64, format int, typ int, source js.TypedArray) {
 	w.gl.Call("texImage2D", target, level, internalformat, width, height, border, format, typ, source)
 }
 
 // TexImage2DData https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texImage2D
 // void gl.texImage2D(target, level, internalformat, format, type, ImageData? pixels);
-func (w *WebGL) TexImage2DData(target js.Value, level float64, internalformat, format js.Value, typ js.Value, source js.Value) {
+func (w *WebGL) TexImage2DData(target int, level float64, internalformat, format, typ int, source js.Value) {
 	w.gl.Call("texImage2D", target, level, internalformat, format, typ, source)
+}
+
+// GenerateMipmap https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/generateMipmap
+// void gl.generateMipmap(target);
+func (w *WebGL) GenerateMipmap(target int) {
+	w.gl.Call("generateMipmap", target)
 }
 
 // TexParameteri https://developer.mozilla.org/en-US/docs/Web/API/WebGLRenderingContext/texParameter
 // void gl.texParameteri(GLenum target, GLenum pname, GLint param);
-func (w *WebGL) TexParameteri(target, name, param js.Value) {
+func (w *WebGL) TexParameteri(target, name, param int) {
 	w.gl.Call("texParameteri", target, name, param)
 }
 

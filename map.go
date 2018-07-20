@@ -38,7 +38,7 @@ func (e MapEvents) wrapEmpty() MapEvents {
 
 // TileRenderer is anything that can render tiles
 type TileRenderer interface {
-	RenderTiles(zoom int, tiles map[string]*Tile)
+	RenderTiles(zoom, lat, lon float64, tiles map[string]*Tile)
 }
 
 // New creates a new map at the specified dib
@@ -371,37 +371,29 @@ func scale(zoom float64) float64 {
 }
 
 // TilesFromCenter gets the tiles required from the current centre point
-func (m *Map) TilesFromCenter(zoom float64, canvasWidth, canvasHeight int) map[string]*Tile {
-	cx, cy := TileNum(int(zoom), m.lat, m.lon)
-
-	tx := int(cx)
-	ty := int(cy)
-
-	px := float64(tx) - cx
-	py := float64(ty) - cy
-
-	scale := scale(zoom)
-
-	dx := -int(px * TileWidth * scale)
-	dy := -int(py * TileHeight * scale)
+func (m *Map) TilesFromCenter(zoom float64, viewWidth, viewHeight int) map[string]*Tile {
+	tx, ty := TileNum(int(zoom), m.lat, m.lon)
 
 	tiles := map[string]*Tile{}
 
-	requiredWidth := int(math.Ceil(float64(canvasWidth)/(TileWidth*scale))) + 2
-	requiredHeight := int(math.Ceil(float64(canvasHeight)/(TileHeight*scale))) + 2
+	requiredWidth := int(math.Ceil(float64(viewWidth)/(TileWidth))) + 2
+	requiredHeight := int(math.Ceil(float64(viewHeight)/(TileHeight))) + 2
 
 	startX := -(requiredWidth / 2)
 	startY := -(requiredHeight / 2)
 	endX := startX + requiredWidth
 	endY := startY + requiredHeight
-	for cx := startX; cx < endX; cx++ {
-		for cy := startY; cy < endY; cy++ {
+	for cx := startX; cx <= endX; cx++ {
+		for cy := startY; cy <= endY; cy++ {
+			ctx := cx + int(tx)
+			cty := cy + int(ty)
+			nwLat, nwLon := NW(int(zoom), ctx, cty)
+
 			t := &Tile{
-				URL:   m.urlEr.URL(int(zoom), cx+tx, cy+ty),
-				DX:    dx - (cx * int(TileWidth*scale)),
-				DY:    dy - (cy * int(TileHeight*scale)),
-				Scale: scale,
-				Zoom:  int(zoom),
+				URL:  m.urlEr.URL(int(zoom), ctx, cty),
+				Lat:  nwLat,
+				Lon:  nwLon,
+				Zoom: int(zoom),
 			}
 			tiles[t.URL.String()] = t
 		}
@@ -444,6 +436,6 @@ func (m *Map) Update(zooming Zooming) {
 	}
 
 	for _, r := range m.tileRenderers {
-		r.RenderTiles(int(m.zoom), tiles)
+		r.RenderTiles(m.zoom, m.lat, m.lon, tiles)
 	}
 }

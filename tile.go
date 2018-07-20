@@ -27,12 +27,10 @@ const (
 
 // Tile represents a tile to be rendered
 type Tile struct {
-	// DX is the delta of X from the center of the canvas
-	DX int
-	// DY is the delta of Y from the center of the canvas
-	DY int
-	// The current scale of the tile
-	Scale float64
+	// Lat is the delta of X from the center of the canvas
+	Lat float64
+	// Lon is the delta of Y from the center of the canvas
+	Lon float64
 	// The URL where we can load the tile
 	URL *url.URL
 	// The zoom level of the tile
@@ -55,12 +53,11 @@ func TileNum(zoom int, lat, lon float64) (x, y float64) {
 
 // Move moves the lat and long by the delta pixels pdx and pdy
 func Move(zoom, lat, lon float64, pdx int, pdy int) (nlat, nlon float64) {
-	scale := scale(zoom)
 	xf, yf := TileNum(int(zoom), lat, lon)
 	dx := float64(pdx) / TileWidth
 	dy := float64(pdy) / TileHeight
 
-	return latlonFromXY(int(zoom), xf+(dx/scale), yf+(dy/scale))
+	return latlonFromXY(int(zoom), xf+(dx), yf+(dy))
 }
 
 func latlonFromXY(zoom int, x, y float64) (lat, lon float64) {
