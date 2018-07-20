@@ -32,7 +32,7 @@ var fov = 60 * math.Pi / 180
 
 // NewTileRenderer creates a new tile renderer
 func NewTileRenderer(canvasEl js.Value) (*TileRenderer, error) {
-	cache, err := lru.New(150)
+	cache, err := lru.New(1000)
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func (t *TileRenderer) updateGl() {
 	cWidth, cHeight := t.Viewport()
 	t.gl.Viewport(0, 0, cWidth, cHeight)
 
-	//t.gl.Enable(t.gl.CullFace)
+	t.gl.Enable(t.gl.CullFace)
 	t.gl.Enable(t.gl.DepthTest)
 
 	t.gl.Clear(t.gl.ColorBufferBit | t.gl.DepthBufferBit)
@@ -149,7 +149,11 @@ func (t *TileRenderer) updateGl() {
 	x *= pichiwmap.TileWidth
 	y *= pichiwmap.TileHeight
 
-	cameraPosition := Identity().XRotate(math.Pi / 4).TransformVector(Coord{X: 0, Y: 0, Z: -500})
+	z := 1000 - (t.zoom * 100)
+
+	cameraPosition := Identity().
+		XRotate(math.Pi / 4).
+		TransformVector(Coord{X: 0, Y: 0, Z: (-100 * float32(z)) - 400})
 
 	cameraPosition.X += float32(x)
 	cameraPosition.Y += float32(y)
@@ -160,6 +164,12 @@ func (t *TileRenderer) updateGl() {
 
 	view := camera.Inverse()
 	viewProjection := projection.Multiply(view)
+
+	t.drawMarker(
+		viewProjection,
+		float32(x),
+		float32(y),
+	)
 
 	for _, td := range t.toDraw {
 		x, y := pichiwmap.TileNum(int(t.zoom), td.DX, td.DY)
@@ -220,7 +230,12 @@ func (t *TileRenderer) requestAnimationFrame() {
 	js.Global().Call("requestAnimationFrame", t.renderFrame)
 }
 
-func (t *TileRenderer) drawImage(viewProjection Matrix4, tex *textureInfo, dstX, dstY float32) {
+func (t *TileRenderer) drawImage(
+	viewProjection Matrix4,
+	tex *textureInfo,
+	dstX,
+	dstY float32,
+) {
 	t.gl.UseProgram(t.program)
 
 	t.gl.EnableVertexAttribArray(t.position)
@@ -239,23 +254,21 @@ func (t *TileRenderer) drawImage(viewProjection Matrix4, tex *textureInfo, dstX,
 	t.gl.DrawArrays(t.gl.Triangles, 0, 6)
 }
 
-// func (t *TileRenderer) drawMarker(dstX, dstY, scale float32) {
-// 	cwidth, cheight := t.Viewport()
+func (t *TileRenderer) drawMarker(
+	viewProjection Matrix4,
+	dstX, dstY float32) {
 
-// 	t.gl.UseProgram(t.markerProgram)
+	t.gl.UseProgram(t.markerProgram)
 
-// 	t.gl.BindBuffer(t.gl.ArrayBuffer, t.markerBuffer)
-// 	t.gl.EnableVertexAttribArray(t.markerPosition)
-// 	t.gl.VertexAttribPointer(t.markerPosition, 3, t.gl.Float, false, 0, 0)
+	t.gl.BindBuffer(t.gl.ArrayBuffer, t.markerBuffer)
+	t.gl.EnableVertexAttribArray(t.markerPosition)
+	t.gl.VertexAttribPointer(t.markerPosition, 3, t.gl.Float, false, 0, 0)
 
-// 	matrix := Orthographic(0, float32(cwidth), float32(cheight), 0, -1, 1)
-// 	matrix = matrix.Translate(dstX, dstY, 0)
+	matrix := viewProjection.Translate(dstX, dstY, 0)
 
-// 	matrix = matrix.Scale(20, 20, 20)
-
-// 	t.gl.UniformMatrix4fv(t.markerMatrix, false, matrix)
-// 	t.gl.DrawArrays(t.gl.TriangleFan, 0, unitCirclePoints)
-// }
+	t.gl.UniformMatrix4fv(t.markerMatrix, false, matrix)
+	t.gl.DrawArrays(t.gl.TriangleFan, 0, unitCirclePoints)
+}
 
 type textureInfo struct {
 	m         sync.Mutex

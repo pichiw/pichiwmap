@@ -334,11 +334,11 @@ func (m Matrix4) Translate(x, y, z float32) Matrix4 {
 	dst[9] = m21
 	dst[10] = m22
 	dst[11] = m23
-
 	dst[12] = m00*x + m10*y + m20*z + m30
 	dst[13] = m01*x + m11*y + m21*z + m31
 	dst[14] = m02*x + m12*y + m22*z + m32
 	dst[15] = m03*x + m13*y + m23*z + m33
+
 	return dst
 }
 
