@@ -4,7 +4,7 @@ _Requires a version of Go > 1.11beta1 (recommend build master from source)_
 
 An attempt to write a 2D/3D WebAssembly + WebGL "[Slippy Map](https://wiki.openstreetmap.org/wiki/Slippy_Map)" for [OpenStreetMap](https://www.openstreetmap.org) data (and other tile servers with the same tile structure).
 
-Right this package is very experimental and most rendering logic is proof-of-concept in cmd/sample. 
+Right now this package is very experimental and most rendering logic is proof-of-concept in cmd/sample. 
 
 ## Done
 
